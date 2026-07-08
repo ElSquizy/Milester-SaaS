@@ -241,6 +241,12 @@ export default function Sidebar() {
             ? (push.errors > 0 ? `${push.errors} con error` : "Enviando a Tienda Nube…")
             : `Tienda Nube · ${relTime(lastPull)}`}
         </div>
+        <button
+          onClick={async () => { await fetch("/api/auth/logout", { method: "POST" }); router.push("/login"); router.refresh(); }}
+          style={{ width: "100%", marginTop: 8, padding: "5px 0", background: "transparent", border: "none", cursor: "pointer", fontSize: "0.6875rem", color: "var(--color-subtle)" }}
+        >
+          Cerrar sesión
+        </button>
       </div>
 
     </aside>
