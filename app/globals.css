@@ -1,0 +1,264 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Brand — electric blue */
+  --color-brand:       #2563EB;   /* primary blue */
+  --color-brand-ink:   #FFFFFF;   /* text ON blue */
+  --color-brand-light: #EFF6FF;   /* blue-50 tint for selection */
+  --color-brand-ring:  rgba(59, 130, 246, 0.35); /* focus ring */
+
+  /* Surfaces — warm very-light gray, never pure white */
+  --color-bg:          #F9FAFB;
+  --color-surface:     #FFFFFF;
+  --color-surface-2:   #F3F4F6;   /* input / header tint */
+
+  /* Ink */
+  --color-ink:         #111827;   /* near-black, soft */
+  --color-muted:       #6B7280;   /* secondary text */
+  --color-subtle:      #9CA3AF;   /* tertiary text */
+  --color-faint:       #D1D5DB;   /* placeholders, icons */
+
+  /* Borders */
+  --color-border:      #E5E7EB;
+  --color-divider:     #F3F4F6;
+
+  /* Semantic */
+  --color-success:     #10B981;
+  --color-success-bg:  #ECFDF5;
+  --color-warning:     #F59E0B;
+  --color-warning-bg:  #FFFBEB;
+  --color-danger:      #EF4444;
+  --color-danger-bg:   #FEF2F2;
+  --color-info:        #3B82F6;
+  --color-info-bg:     #EFF6FF;
+
+  /* Radii */
+  --radius-card:    20px;
+  --radius-modal:   24px;
+  --radius-control: 12px;
+  --radius-input:   10px;
+  --radius-pill:    9999px;
+
+  /* Shadows — soft, wide, diffuse */
+  --shadow-card:     0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.03);
+  --shadow-float:    0 10px 25px -5px rgba(17, 24, 39, 0.06), 0 8px 10px -6px rgba(17, 24, 39, 0.02);
+  --shadow-dropdown: 0 8px 24px -6px rgba(17, 24, 39, 0.10), 0 2px 6px rgba(17, 24, 39, 0.04);
+}
+
+/* ── Base ────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100dvh;
+}
+
+/* ── Focus ───────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Scrollbar ───────────────────────────────── */
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--color-faint); border-radius: 999px; }
+
+/* ── Typography helpers ──────────────────────── */
+.tabular { font-variant-numeric: tabular-nums; }
+.mono    { font-family: var(--font-mono), "SF Mono", "Fira Code", monospace; }
+
+/* ── Floating cards ──────────────────────────── */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.card-float {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-float);
+}
+
+/* ── Pills (status badges) ───────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  width: fit-content;
+}
+.pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.pill-neutral { background: var(--color-surface-2); color: var(--color-muted); }
+.pill-success { background: var(--color-success-bg); color: var(--color-success); }
+.pill-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.pill-danger  { background: var(--color-danger-bg);  color: var(--color-danger); }
+.pill-info    { background: var(--color-info-bg);    color: var(--color-info); }
+
+/* ── Buttons ─────────────────────────────────── */
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--color-brand);
+  color: var(--color-brand-ink);
+  font-size: 0.875rem; font-weight: 600;
+  cursor: pointer;
+  transition: background 0.14s, box-shadow 0.14s, transform 0.06s;
+}
+.btn-primary:hover  { background: #1D4ED8; }
+.btn-primary:active { transform: translateY(0.5px); }
+.btn-primary:disabled { background: var(--color-faint); cursor: default; }
+
+.btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 0.875rem; font-weight: 500;
+  cursor: pointer;
+  transition: background 0.14s, border-color 0.14s;
+}
+.btn-secondary:hover  { background: var(--color-surface-2); }
+.btn-secondary:disabled { color: var(--color-faint); cursor: default; }
+
+/* ── Inputs ──────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+.input::placeholder { color: var(--color-subtle); }
+.input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-ring);
+}
+select.input { cursor: pointer; }
+
+/* ── iOS-style toggle switch ─────────────────── */
+.switch {
+  position: relative;
+  width: 40px; height: 24px;
+  border-radius: var(--radius-pill);
+  border: none;
+  background: var(--color-faint);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.18s ease;
+  flex-shrink: 0;
+}
+.switch[data-on="true"] { background: var(--color-brand); }
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(17, 24, 39, 0.2);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.switch[data-on="true"]::after { transform: translateX(16px); }
+
+/* ── Dropdown menus ──────────────────────────── */
+.menu {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-dropdown);
+  padding: 6px;
+}
+.menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.menu-item:hover { background: var(--color-surface-2); }
+
+/* ── Data table header cells ─────────────────── */
+.data-th {
+  padding: 10px 12px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+  white-space: nowrap;
+}
+
+/* ── Animations ──────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.anim-up    { animation: fadeUp       0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-in    { animation: fadeIn       0.18s ease-out both; }
+.anim-panel { animation: slideInRight 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-modal { animation: slideUp      0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-spin  { animation: spin         0.75s linear infinite; }
+
+.delay-1 { animation-delay: 40ms; }
+.delay-2 { animation-delay: 80ms; }
+.delay-3 { animation-delay: 120ms; }
+.delay-4 { animation-delay: 160ms; }
+
+/* ── Hover helpers ───────────────────────────── */
+.product-row-link:hover > div { background: var(--color-surface-2); }
+
+.alert-card { transition: border-color 0.14s, transform 0.14s, box-shadow 0.14s; }
+.alert-card:hover { border-color: var(--color-faint); transform: translateY(-1px); box-shadow: var(--shadow-float); }
+
+/* ── Reduced motion ──────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .anim-up, .anim-in, .anim-panel, .anim-modal { animation: none; }
+}

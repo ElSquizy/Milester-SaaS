@@ -1,0 +1,279 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Settings {
+  id                Int      @id @default(autoincrement())
+  storeId           String?
+  accessToken       String?
+  appId             String?  // Tienda Nube App / Client ID (for OAuth)
+  clientSecret      String?  // Tienda Nube Client Secret (for OAuth)
+  oauthState        String?  // CSRF state for the in-progress OAuth flow
+  anthropicApiKey   String?
+  lastChangeCheckAt DateTime? // last time we scanned TN for incoming product changes
+  lastOrderSyncAt   DateTime? // last time we pulled incremental order/sales updates
+  lastCampaignTickAt DateTime? // last time the campaign scheduler ran
+  lastCatalogSyncAt DateTime? // last incremental catalog (products+collections) pull from TN
+  lastPullAt        DateTime? // last time the unified "pull current state" sync ran
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// Incoming changes detected on Tienda Nube, awaiting the developer's approval.
+model IncomingChange {
+  id           Int      @id @default(autoincrement())
+  tiendaNubeId String   // TN product id
+  productId    Int?     // local product id, null if the product is new on TN
+  productName  String
+  field        String   // name | price | published | stock | tags | categories | new
+  localValue   String?
+  remoteValue  String?
+  conflict     Boolean  @default(false) // true if the local product also has unsynced edits
+  detectedAt   DateTime @default(now())
+
+  @@unique([tiendaNubeId, field])
+}
+
+model Product {
+  id             Int         @id @default(autoincrement())
+  tiendaNubeId   String?     @unique
+  name           String
+  description    String?
+  price          Float              // base price
+  promotionalPrice Float?           // TN promotional_price (active sale price); null = no sale
+  originalPrice  Float
+  seoTitle       String?
+  seoDescription String?
+  imageUrl       String?
+  categoryId     String?
+  categoryName   String?
+  stock          Int?
+  infiniteStock  Boolean   @default(false)  // TN "stock ilimitado" (variante sin gestión de stock)
+  attributes     String    @default("[]")   // JSON array of variant attribute names, e.g. ["Plataforma","Cuenta"]
+  sku            String?
+  published      Boolean   @default(true)
+  tags           String    @default("[]")
+  variants       Variant[]
+  promotion      Promotion?
+  changelog      Changelog[]
+  syncStatus     String      @default("pending")
+  pendingDelete  Boolean     @default(false)  // staged for deletion; removed from TN + local on next sync
+  lastSyncedAt   DateTime?
+  unitsSold      Int         @default(0)   // denormalized from order items
+  lastSoldAt     DateTime?                 // most recent sale date
+  orderItems     OrderItem[]
+  campaignItems  CampaignItem[]
+  categories     ProductCategory[]
+  descriptionTemplateId Int?                 // DescriptionTemplate applied to build `description`
+  descriptionTemplate   DescriptionTemplate? @relation(fields: [descriptionTemplateId], references: [id], onDelete: SetNull)
+  descriptionData       String?              // JSON: slot values for the applied template
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+model DescriptionTemplate {
+  id        Int       @id @default(autoincrement())
+  name      String
+  skeleton  String                          // HTML skeleton with {{slot}} tokens + <!--repeat:key--> regions
+  fields    String    @default("[]")        // JSON schema of slots (key, label, type, item/pairs config)
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Category {
+  id           Int               @id @default(autoincrement())
+  tiendaNubeId String            @unique
+  name         String
+  parentTnId   String?           // TN parent id; "0" or null = root
+  products     ProductCategory[]
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+}
+
+model ProductCategory {
+  productId  Int
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  categoryId Int
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+}
+
+model Campaign {
+  id            Int            @id @default(autoincrement())
+  name          String
+  status        String         @default("draft")  // draft | active | ended
+  discountType  String                            // pct | fixed
+  discountValue Float
+  addTag        String?                           // tag to add to affected products
+  addCategoryId Int?                              // local Category id to add products to (optional)
+  scope         String         @default("all")    // all | category | tag | products
+  scopeValue    String?                           // category name or tag, depending on scope
+  startDate     DateTime?
+  endDate       DateTime?
+  appliedAt     DateTime?
+  endedAt       DateTime?
+  items         CampaignItem[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model CampaignItem {
+  id            Int      @id @default(autoincrement())
+  campaignId    Int
+  campaign      Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  originalPrice Float    // snapshot taken when the campaign was applied, for revert
+  campaignPrice Float
+}
+
+model Order {
+  id            Int         @id @default(autoincrement())
+  tiendaNubeId  String      @unique
+  number        Int?
+  total         Float
+  status        String      // open | closed | cancelled
+  paymentStatus String?
+  customerName  String?
+  customerId    Int?
+  customer      Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  source        String      @default("tiendanube") // tiendanube | local
+  orderedAt     DateTime    // Tienda Nube created_at
+
+  // Financial
+  subtotal       Float?
+  discount       Float?
+  shippingCost   Float?
+  totalPaid      Float?
+  currency       String?
+  paymentMethod  String?    // gateway_name
+
+  // Shipping / fulfillment
+  shippingStatus String?
+  shippingMethod String?    // shipping_option
+  shippingType   String?    // ship | pickup
+  trackingNumber String?
+  trackingUrl    String?
+  shippingCarrier String?
+  shippingAddress String?   // formatted single-line address for display
+
+  // Lifecycle timestamps
+  paidAt        DateTime?
+  shippedAt     DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+  closedAt      DateTime?
+
+  // Notes & channel
+  customerNote  String?
+  ownerNote     String?
+  channel       String?     // order_origin / storefront
+
+  rawData       String?     // full TN order JSON snapshot
+
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+}
+
+model Customer {
+  id             Int      @id @default(autoincrement())
+  tiendaNubeId   String?  @unique // TN customer id; null for locally-created customers
+  name           String
+  email          String?
+  phone          String?
+  identification String?  // DNI / CUIT — strongest dedup key
+  customerType   String?  // person | business
+  businessName   String?
+  city           String?
+  province       String?
+  totalSpentTn   Float?   // TN's own total_spent figure
+  acceptsMarketing Boolean?
+  firstOrderAt   DateTime?
+  mergedIntoId   Int?     // if set, this account was merged into another (duplicate)
+  rawData        String?  // full TN customer JSON snapshot
+  orders         Order[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OrderItem {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productTnId String?  // Tienda Nube product id
+  productId   Int?     // local product id, if matched
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name        String
+  variantName String?  // edition / variant label
+  sku         String?
+  imageUrl    String?
+  quantity    Int
+  price       Float
+}
+
+model Changelog {
+  id        Int      @id @default(autoincrement())
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  field     String
+  oldValue  String?
+  newValue  String?
+  synced    Boolean  @default(false)
+  syncedAt  DateTime?
+  createdAt DateTime @default(now())
+}
+
+model Variant {
+  id               Int     @id @default(autoincrement())
+  productId        Int
+  product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tiendaNubeId     String?
+  price            Float
+  promotionalPrice Float?
+  stock            Int?
+  sku              String?
+  values           String  @default("[]")  // JSON array of this variant's attribute values, e.g. ["PS5","Primario"]
+}
+
+model AiProvider {
+  id        Int          @id @default(autoincrement())
+  name      String
+  provider  String       // "google" | "anthropic" | "openai"
+  apiKey    String
+  model     String
+  isDefault Boolean      @default(false)
+  templates AiTemplate[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+}
+
+model AiTemplate {
+  id         Int         @id @default(autoincrement())
+  context    String      // "description" | "seoTitle" | "seoDescription" | "name"
+  label      String
+  prompt     String
+  providerId Int?
+  provider   AiProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Promotion {
+  id          Int      @id @default(autoincrement())
+  productId   Int      @unique
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  promoPrice  Float
+  startDate   DateTime
+  endDate     DateTime
+  active      Boolean  @default(false)
+  appliedAt   DateTime?
+  revertedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
