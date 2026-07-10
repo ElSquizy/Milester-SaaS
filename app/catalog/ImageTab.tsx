@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import ImageComposer from "./ImageComposer";
 
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number };
@@ -21,6 +22,7 @@ export default function ImageTab({
   setProductImageUrl: (v: string) => void;
   fallbackImageUrl: string;
 }) {
+  const router = useRouter();
   const sel = imageTemplates.find((t) => t.id === imgTmplId) || null;
   const layer = productImageUrl || fallbackImageUrl;
 
@@ -63,6 +65,7 @@ export default function ImageTab({
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "No se pudo subir");
       setMsg({ kind: "ok", text: "Imagen subida a Tienda Nube ✓" });
+      router.refresh(); // reflect the new image in the catalog/panel behind the modal
     } catch (e) {
       setMsg({ kind: "err", text: e instanceof Error ? e.message : "Error" });
     } finally { setUploading(false); }

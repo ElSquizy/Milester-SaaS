@@ -16,7 +16,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { name, sku, description, price, promotionalPrice, stock, seoTitle, seoDescription, imageUrl, published, tags, categoryIds, descriptionTemplateId, descriptionData, imageTemplateId, productImageUrl } = body;
+  const { name, sku, description, price, promotionalPrice, stock, infiniteStock, seoTitle, seoDescription, imageUrl, published, tags, categoryIds, descriptionTemplateId, descriptionData, imageTemplateId, productImageUrl } = body;
 
   const existing = await prisma.product.findUnique({
     where: { id: Number(id) },
@@ -61,10 +61,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (resolvedDescription !== undefined && existing.description !== resolvedDescription) changes.push({ field: "description", oldValue: null, newValue: null });
   if (published !== undefined && existing.published !== published) changes.push({ field: "published", oldValue: String(existing.published), newValue: String(published) });
   if (tags !== undefined && existing.tags !== tags) changes.push({ field: "tags", oldValue: existing.tags, newValue: tags });
-  // Stock: a non-negative integer means finite stock (turns off "unlimited").
+  // Stock: `infiniteStock` toggles unlimited (stock null). A finite number turns it off.
   const normStock = stock === undefined ? undefined : (stock === null || stock === "" || isNaN(Number(stock)) ? null : Math.max(0, Math.round(Number(stock))));
-  const stockChanged = normStock !== undefined && existing.stock !== normStock;
-  if (stockChanged) changes.push({ field: "stock", oldValue: existing.stock == null ? null : String(existing.stock), newValue: normStock == null ? null : String(normStock) });
+  const newInfinite: boolean | undefined = infiniteStock === undefined ? undefined : !!infiniteStock;
+  let effStock: number | null | undefined;
+  if (newInfinite === true) effStock = null;                                   // ilimitado
+  else if (newInfinite === false) effStock = normStock === undefined ? existing.stock : normStock; // finito
+  else effStock = normStock;                                                   // solo stock, sin tocar el flag
+  const infiniteChanged = newInfinite !== undefined && existing.infiniteStock !== newInfinite;
+  const stockValChanged = effStock !== undefined && existing.stock !== effStock;
+  const stockChanged = stockValChanged || infiniteChanged;
+  if (stockChanged) changes.push({ field: "stock", oldValue: existing.stock == null ? "∞" : String(existing.stock), newValue: (newInfinite ?? existing.infiniteStock) ? "∞" : String(effStock ?? existing.stock ?? 0) });
 
   // Categories: compare incoming local ids to existing links.
   let categoriesChanged = false;
@@ -96,7 +103,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       ...(productImageUrl !== undefined ? { productImageUrl: productImageUrl || null } : {}),
       ...(price !== undefined ? { price, ...(priceChanged && !existing.promotion ? { originalPrice: price } : {}) } : {}),
       ...(normPromo !== undefined ? { promotionalPrice: normPromo } : {}),
-      ...(normStock !== undefined ? { stock: normStock, ...(normStock != null ? { infiniteStock: false } : {}) } : {}),
+      ...(effStock !== undefined ? { stock: effStock } : {}),
+      ...(newInfinite !== undefined ? { infiniteStock: newInfinite } : {}),
       ...(seoTitle !== undefined ? { seoTitle } : {}),
       ...(seoDescription !== undefined ? { seoDescription } : {}),
       ...(imageUrl !== undefined ? { imageUrl } : {}),
@@ -119,7 +127,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // Stock lives on the variant in TN. Only mirror when the product is single-variant
   // (multi-variant stock is managed per variant in the variants manager).
   if (stockChanged && existing.variants.length === 1) {
-    await prisma.variant.update({ where: { id: existing.variants[0].id }, data: { stock: normStock } });
+    await prisma.variant.update({ where: { id: existing.variants[0].id }, data: { stock: effStock ?? null } });
   }
 
   // Replace category links when categoryIds was provided and changed.

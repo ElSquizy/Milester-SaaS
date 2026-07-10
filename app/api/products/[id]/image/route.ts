@@ -55,10 +55,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     // Now safe to drop the previous images.
     for (const imgId of oldIds) {
+      if (imgId === newImg?.id) continue;
       try { await client.delete(`/products/${product.tiendaNubeId}/images/${imgId}`); } catch { /* best-effort */ }
     }
 
-    const src: string | null = newImg?.src || null;
+    // Prefer the src from the upload; fall back to re-reading the product's images.
+    let src: string | null = newImg?.src || null;
+    if (!src) {
+      try {
+        const after = await client.get(`/products/${product.tiendaNubeId}/images`);
+        if (Array.isArray(after.data) && after.data.length) src = after.data[0].src || null;
+      } catch { /* ignore */ }
+    }
+    // Always mirror locally (imageUrl drives the catalog thumbnail).
     if (src) await prisma.product.update({ where: { id: productId }, data: { imageUrl: src } });
 
     return NextResponse.json({ ok: true, url: src });

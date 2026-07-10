@@ -20,6 +20,9 @@ type Product = {
   seoDescription: string | null;
   sku: string | null;
   imageUrl: string | null;
+  stock: number | null;
+  infiniteStock: boolean;
+  variants: Array<{ id: number }>;
   categoryIds: number[];
   categoryChips: Array<{ id: number; name: string }>;
 };
@@ -46,6 +49,8 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
   const [imageTemplates, setImageTemplates] = useState<ImgTmpl[]>([]);
   const [imgTmplId, setImgTmplId] = useState<number | null>(product.imageTemplateId);
   const [productImageUrl, setProductImageUrl] = useState(product.productImageUrl || "");
+  const [infiniteStock, setInfiniteStock] = useState(product.infiniteStock);
+  const [stock, setStock] = useState(product.stock == null ? "" : String(product.stock));
   const [catIds, setCatIds] = useState<Set<number>>(new Set(product.categoryIds));
   const [extraNames, setExtraNames] = useState<Map<number, string>>(new Map());
   const [saving, setSaving] = useState(false);
@@ -60,7 +65,7 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
 
   // Dirty tracking: compare a signature of every editable field to its initial value,
   // so an accidental click outside doesn't silently discard unsaved work.
-  const currentSig = JSON.stringify({ name, sku, description, descMode, tmplId, tmplData, seoTitle, seoDescription, imageUrl, imgTmplId, productImageUrl, cats: [...catIds].sort((a, b) => a - b) });
+  const currentSig = JSON.stringify({ name, sku, description, descMode, tmplId, tmplData, seoTitle, seoDescription, imageUrl, imgTmplId, productImageUrl, infiniteStock, stock, cats: [...catIds].sort((a, b) => a - b) });
   const initialSig = useRef<string | null>(null);
   if (initialSig.current === null) initialSig.current = currentSig;
   const dirty = initialSig.current !== currentSig;
@@ -104,6 +109,7 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
         body: JSON.stringify({
           name, sku, seoTitle, seoDescription, imageUrl,
           imageTemplateId: imgTmplId, productImageUrl,
+          infiniteStock, stock: infiniteStock ? null : (stock.trim() === "" ? null : Number(stock)),
           categoryIds: [...catIds], sync,
           // Template mode renders server-side into `description`; HTML mode sends raw + detaches template.
           ...(descMode === "template" && tmplId
@@ -209,6 +215,19 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
                   </Field>
                   <Field label="SKU" hint="Código interno">
                     <input className="input" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Ej: PS5-DIG-0601" style={{ fontFamily: "var(--font-mono), monospace" }} />
+                  </Field>
+                  <Field label="Stock">
+                    {product.variants.length > 1 ? (
+                      <p style={{ fontSize: "0.8125rem", color: "var(--color-subtle)", margin: 0 }}>Este producto tiene variantes — gestioná el stock en la pestaña <strong>Variantes</strong>.</p>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <button type="button" className="switch" data-on={infiniteStock} onClick={() => setInfiniteStock((v) => !v)} aria-label="Stock ilimitado" />
+                        <span style={{ fontSize: "0.875rem", color: "var(--color-ink)" }}>Stock ilimitado (∞)</span>
+                        {!infiniteStock && (
+                          <input className="input" type="number" min={0} value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" style={{ width: 110, marginLeft: "auto" }} />
+                        )}
+                      </div>
+                    )}
                   </Field>
                   <Field label="Colecciones" hint={`${catIds.size}`}>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>

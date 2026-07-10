@@ -28,6 +28,8 @@ type EditProduct = {
   tags: string;
   categoryName: string | null;
   imageUrl: string | null;
+  stock: number | null;
+  infiniteStock: boolean;
   syncStatus: string;
   unitsSold: number;
   lastSoldAt: Date | null;
