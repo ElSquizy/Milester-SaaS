@@ -16,6 +16,8 @@ type EditProduct = {
   description: string | null;
   descriptionTemplateId: number | null;
   descriptionData: string | null;
+  imageTemplateId: number | null;
+  productImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
   price: number;

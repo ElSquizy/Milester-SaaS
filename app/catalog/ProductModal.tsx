@@ -3,7 +3,10 @@ import { useState, useEffect, useRef } from "react";
 import CollectionPicker from "./CollectionPicker";
 import VariantsManager from "./VariantsManager";
 import DescriptionEditor, { type Tmpl } from "./DescriptionEditor";
+import ImageComposer from "./ImageComposer";
 import type { TemplateData } from "@/lib/descriptionTemplates";
+
+type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string };
 
 type Product = {
   id: number;
@@ -11,6 +14,8 @@ type Product = {
   description: string | null;
   descriptionTemplateId: number | null;
   descriptionData: string | null;
+  imageTemplateId: number | null;
+  productImageUrl: string | null;
   seoTitle: string | null;
   seoDescription: string | null;
   sku: string | null;
@@ -38,18 +43,24 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
   const [seoTitle, setSeoTitle] = useState(product.seoTitle || "");
   const [seoDescription, setSeoDescription] = useState(product.seoDescription || "");
   const [imageUrl, setImageUrl] = useState(product.imageUrl || "");
+  const [imageTemplates, setImageTemplates] = useState<ImgTmpl[]>([]);
+  const [imgTmplId, setImgTmplId] = useState<number | null>(product.imageTemplateId);
+  const [productImageUrl, setProductImageUrl] = useState(product.productImageUrl || "");
   const [catIds, setCatIds] = useState<Set<number>>(new Set(product.categoryIds));
   const [extraNames, setExtraNames] = useState<Map<number, string>>(new Map());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<"general" | "descripcion" | "variantes" | "seo">("general");
+  const [tab, setTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo">("general");
 
-  useEffect(() => { fetch("/api/description-templates").then((r) => r.json()).then(setTemplates).catch(() => {}); }, []);
+  useEffect(() => {
+    fetch("/api/description-templates").then((r) => r.json()).then(setTemplates).catch(() => {});
+    fetch("/api/image-templates").then((r) => r.json()).then(setImageTemplates).catch(() => {});
+  }, []);
 
   // Dirty tracking: compare a signature of every editable field to its initial value,
   // so an accidental click outside doesn't silently discard unsaved work.
-  const currentSig = JSON.stringify({ name, sku, description, descMode, tmplId, tmplData, seoTitle, seoDescription, imageUrl, cats: [...catIds].sort((a, b) => a - b) });
+  const currentSig = JSON.stringify({ name, sku, description, descMode, tmplId, tmplData, seoTitle, seoDescription, imageUrl, imgTmplId, productImageUrl, cats: [...catIds].sort((a, b) => a - b) });
   const initialSig = useRef<string | null>(null);
   if (initialSig.current === null) initialSig.current = currentSig;
   const dirty = initialSig.current !== currentSig;
@@ -92,6 +103,7 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name, sku, seoTitle, seoDescription, imageUrl,
+          imageTemplateId: imgTmplId, productImageUrl,
           categoryIds: [...catIds], sync,
           // Template mode renders server-side into `description`; HTML mode sends raw + detaches template.
           ...(descMode === "template" && tmplId
@@ -172,6 +184,7 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
             {([
               ["general", "General"],
               ["descripcion", "Descripción"],
+              ["imagen", "Imagen"],
               ["variantes", "Variantes"],
               ["seo", "SEO"],
             ] as const).map(([v, label]) => (
@@ -234,6 +247,37 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
                 productName={name}
               />
             )}
+
+            {tab === "imagen" && (() => {
+              const sel = imageTemplates.find((t) => t.id === imgTmplId) || null;
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28, alignItems: "start" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+                    <Field label="Plantilla de imagen">
+                      <select className="input" value={imgTmplId ?? ""} onChange={(e) => setImgTmplId(e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">Sin plantilla (imagen simple)</option>
+                        {imageTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                      {imageTemplates.length === 0 && (
+                        <p style={{ marginTop: 6, fontSize: "0.75rem", color: "var(--color-subtle)" }}>
+                          No hay plantillas de imagen. Creá una en <a href="/catalog/templates" style={{ color: "var(--color-brand)" }}>Plantillas → Imágenes</a>.
+                        </p>
+                      )}
+                    </Field>
+                    <Field label="Imagen del producto (URL)" hint="1:1">
+                      <input className="input" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} placeholder="https://…/producto.png" style={{ fontSize: "0.8125rem" }} />
+                    </Field>
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", lineHeight: 1.5, margin: 0 }}>
+                      La imagen del producto se ubica centrada, entre el fondo y el cover. Si es más grande, se reescala al centro.
+                    </p>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 10 }}>Vista previa</div>
+                    <ImageComposer backgroundUrl={sel?.backgroundUrl} coverUrl={sel?.coverUrl} productUrl={productImageUrl || imageUrl} size={360} />
+                  </div>
+                </div>
+              );
+            })()}
 
             {tab === "variantes" && <VariantsManager productId={product.id} />}
 

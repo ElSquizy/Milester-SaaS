@@ -16,7 +16,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json();
-  const { name, sku, description, price, promotionalPrice, stock, seoTitle, seoDescription, imageUrl, published, tags, categoryIds, descriptionTemplateId, descriptionData } = body;
+  const { name, sku, description, price, promotionalPrice, stock, seoTitle, seoDescription, imageUrl, published, tags, categoryIds, descriptionTemplateId, descriptionData, imageTemplateId, productImageUrl } = body;
 
   const existing = await prisma.product.findUnique({
     where: { id: Number(id) },
@@ -92,6 +92,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       ...(resolvedDescription !== undefined ? { description: resolvedDescription } : {}),
       ...(tmplId !== undefined ? { descriptionTemplateId: tmplId } : {}),
       ...(tmplData !== undefined ? { descriptionData: tmplData } : {}),
+      ...(imageTemplateId !== undefined ? { imageTemplateId: imageTemplateId === null ? null : Number(imageTemplateId) } : {}),
+      ...(productImageUrl !== undefined ? { productImageUrl: productImageUrl || null } : {}),
       ...(price !== undefined ? { price, ...(priceChanged && !existing.promotion ? { originalPrice: price } : {}) } : {}),
       ...(normPromo !== undefined ? { promotionalPrice: normPromo } : {}),
       ...(normStock !== undefined ? { stock: normStock, ...(normStock != null ? { infiniteStock: false } : {}) } : {}),

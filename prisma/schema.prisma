@@ -71,6 +71,9 @@ model Product {
   descriptionTemplateId Int?                 // DescriptionTemplate applied to build `description`
   descriptionTemplate   DescriptionTemplate? @relation(fields: [descriptionTemplateId], references: [id], onDelete: SetNull)
   descriptionData       String?              // JSON: slot values for the applied template
+  imageTemplateId Int?                       // ImageTemplate (background + cover frame) applied to the image
+  imageTemplate   ImageTemplate? @relation(fields: [imageTemplateId], references: [id], onDelete: SetNull)
+  productImageUrl String?                    // raw product-layer image URL, composited under the cover
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 }
@@ -83,6 +86,16 @@ model DescriptionTemplate {
   products  Product[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+model ImageTemplate {
+  id            Int       @id @default(autoincrement())
+  name          String
+  backgroundUrl String                        // canvas/background layer (1024x1024)
+  coverUrl      String                        // frame layer (670x763), drawn on top
+  products      Product[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Category {
