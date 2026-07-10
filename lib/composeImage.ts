@@ -4,19 +4,37 @@ import { LAYOUT } from "./imageTemplates";
 const CANVAS = LAYOUT.canvas; // 1024
 const T = { r: 0, g: 0, b: 0, alpha: 0 }; // transparent
 
+// Generated drop shadow (cover PNGs are shadow-free; we cast the shadow ourselves).
+const SHADOW = { offsetX: -6, offsetY: 18, blur: 20, opacity: 0.5 };
+
 async function fetchBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`No se pudo descargar la imagen (${res.status}): ${url}`);
   return Buffer.from(await res.arrayBuffer());
 }
 
-/** Returns a copy of an RGBA image keeping only its opaque pixels (soft shadow removed). */
-async function opaqueOnly(buf: Buffer): Promise<Buffer> {
-  const img = sharp(buf).ensureAlpha();
-  const { data, info } = await img.raw().toBuffer({ resolveWithObject: true });
-  const out = Buffer.from(data);
-  for (let i = 3; i < out.length; i += 4) out[i] = out[i] >= 250 ? 255 : 0;
-  return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+/**
+ * Builds a soft, realistic drop shadow from the combined silhouette of the
+ * cover + product (the cover is a frame with a window; the product fills it, so
+ * the union is a solid shape). The silhouette is pre-offset, tinted black at a
+ * fixed opacity, and blurred. Returns a full-canvas RGBA PNG, or null if empty.
+ */
+async function buildShadow(cover: { buf: Buffer } | null, product: { buf: Buffer } | null): Promise<Buffer | null> {
+  const parts: OverlayOptions[] = [];
+  if (cover) parts.push({ input: cover.buf, left: Math.round(LAYOUT.cover.x) + SHADOW.offsetX, top: Math.round(LAYOUT.cover.y) + SHADOW.offsetY });
+  if (product) parts.push({ input: product.buf, left: Math.round(LAYOUT.product.x) + SHADOW.offsetX, top: Math.round(LAYOUT.product.y) + SHADOW.offsetY });
+  if (parts.length === 0) return null;
+
+  const silhouette = await sharp({ create: { width: CANVAS, height: CANVAS, channels: 4, background: T } })
+    .composite(parts).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+
+  const { data, info } = silhouette;
+  const a = Math.round(255 * SHADOW.opacity);
+  const shadow = Buffer.alloc(data.length); // black (0,0,0), alpha from silhouette
+  for (let i = 3; i < data.length; i += 4) shadow[i] = data[i] > 10 ? a : 0;
+
+  return sharp(shadow, { raw: { width: info.width, height: info.height, channels: 4 } })
+    .blur(SHADOW.blur).png().toBuffer();
 }
 
 export type ComposeInput = {
@@ -26,12 +44,11 @@ export type ComposeInput = {
 };
 
 /**
- * Composes the product image (1024×1024 PNG). Layer order:
+ * Composes the product image (1024×1024 PNG). Layer order, bottom → top:
  *   1. background (fills canvas)
- *   2. cover — full (its soft shadow lands here, then gets covered by the product)
+ *   2. generated shadow (from cover + product silhouette)
  *   3. product (670×670, centered, bottom-aligned to the cover)
- *   4. cover — opaque frame only (border drawn on top of the product; NO shadow)
- * This keeps the frame's shadow around the frame while never darkening the product.
+ *   4. cover (670×763 frame, centered)
  */
 export async function composeProductImage(input: ComposeInput): Promise<Buffer> {
   const composites: OverlayOptions[] = [];
@@ -42,30 +59,19 @@ export async function composeProductImage(input: ComposeInput): Promise<Buffer> 
     composites.push({ input: bg, left: 0, top: 0 });
   }
 
-  let coverBuf: Buffer | null = null;
-  if (input.coverUrl) {
-    coverBuf = await sharp(await fetchBuffer(input.coverUrl))
-      .resize(LAYOUT.cover.w, LAYOUT.cover.h, { fit: "contain", background: T })
-      .ensureAlpha().png().toBuffer();
-    // Full cover first: provides the shadow (will be covered by the product where they overlap).
-    composites.push({ input: coverBuf, left: Math.round(LAYOUT.cover.x), top: Math.round(LAYOUT.cover.y) });
-  }
+  const coverBuf = input.coverUrl
+    ? await sharp(await fetchBuffer(input.coverUrl)).resize(LAYOUT.cover.w, LAYOUT.cover.h, { fit: "contain", background: T }).ensureAlpha().png().toBuffer()
+    : null;
+  const productBuf = input.productUrl
+    ? await sharp(await fetchBuffer(input.productUrl)).resize(LAYOUT.product.w, LAYOUT.product.h, { fit: "contain", background: T, withoutEnlargement: true }).ensureAlpha().png().toBuffer()
+    : null;
 
-  if (input.productUrl) {
-    const prod = await sharp(await fetchBuffer(input.productUrl))
-      .resize(LAYOUT.product.w, LAYOUT.product.h, { fit: "contain", background: T, withoutEnlargement: true })
-      .png().toBuffer();
-    composites.push({ input: prod, left: Math.round(LAYOUT.product.x), top: Math.round(LAYOUT.product.y) });
-  }
+  const shadow = await buildShadow(coverBuf ? { buf: coverBuf } : null, productBuf ? { buf: productBuf } : null);
+  if (shadow) composites.push({ input: shadow, left: 0, top: 0 });
 
-  if (coverBuf) {
-    // Opaque frame on top of the product (shadow stripped) so the border stays crisp.
-    const frame = await opaqueOnly(coverBuf);
-    composites.push({ input: frame, left: Math.round(LAYOUT.cover.x), top: Math.round(LAYOUT.cover.y) });
-  }
+  if (productBuf) composites.push({ input: productBuf, left: Math.round(LAYOUT.product.x), top: Math.round(LAYOUT.product.y) });
+  if (coverBuf) composites.push({ input: coverBuf, left: Math.round(LAYOUT.cover.x), top: Math.round(LAYOUT.cover.y) });
 
   return sharp({ create: { width: CANVAS, height: CANVAS, channels: 4, background: T } })
-    .composite(composites)
-    .png()
-    .toBuffer();
+    .composite(composites).png().toBuffer();
 }
