@@ -11,10 +11,10 @@ export default async function TemplatesPage() {
     }),
     prisma.imageTemplate.findMany({
       orderBy: { createdAt: "asc" },
-      select: { id: true, name: true, backgroundUrl: true, coverUrl: true, _count: { select: { products: true } } },
+      select: { id: true, name: true, backgroundUrl: true, coverUrl: true, shadowOffsetX: true, shadowOffsetY: true, shadowBlur: true, shadowOpacity: true, _count: { select: { products: true } } },
     }),
   ]);
   const list = templates.map((t) => ({ id: t.id, name: t.name, skeleton: t.skeleton, fields: t.fields, productCount: t._count.products }));
-  const imgList = imageTemplates.map((t) => ({ id: t.id, name: t.name, backgroundUrl: t.backgroundUrl, coverUrl: t.coverUrl, productCount: t._count.products }));
+  const imgList = imageTemplates.map((t) => ({ id: t.id, name: t.name, backgroundUrl: t.backgroundUrl, coverUrl: t.coverUrl, shadowOffsetX: t.shadowOffsetX, shadowOffsetY: t.shadowOffsetY, shadowBlur: t.shadowBlur, shadowOpacity: t.shadowOpacity, productCount: t._count.products }));
   return <TemplatesClient templates={list} imageTemplates={imgList} />;
 }

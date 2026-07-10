@@ -33,8 +33,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const productUrl = body.productImageUrl ?? product.productImageUrl;
   if (!productUrl) return NextResponse.json({ error: "Falta la URL de la imagen del producto" }, { status: 400 });
 
+  const tmpl = product.imageTemplate;
+  const shadow = tmpl
+    ? { offsetX: tmpl.shadowOffsetX, offsetY: tmpl.shadowOffsetY, blur: tmpl.shadowBlur, opacity: tmpl.shadowOpacity }
+    : undefined;
+
   try {
-    const png = await composeProductImage({ backgroundUrl, coverUrl, productUrl });
+    const png = await composeProductImage({ backgroundUrl, coverUrl, productUrl, shadow });
     const attachment = png.toString("base64");
     const client = getTiendaNubeClient(settings.storeId, settings.accessToken);
 

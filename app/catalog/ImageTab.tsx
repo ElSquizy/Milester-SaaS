@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import ImageComposer from "./ImageComposer";
 
-type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string };
+type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number };
 
 export default function ImageTab({
   productId,
@@ -41,7 +41,10 @@ export default function ImageTab({
     try {
       const res = await fetch("/api/compose", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ backgroundUrl: sel?.backgroundUrl, coverUrl: sel?.coverUrl, productUrl: layer }),
+        body: JSON.stringify({
+          backgroundUrl: sel?.backgroundUrl, coverUrl: sel?.coverUrl, productUrl: layer,
+          shadow: sel ? { offsetX: sel.shadowOffsetX, offsetY: sel.shadowOffsetY, blur: sel.shadowBlur, opacity: sel.shadowOpacity } : undefined,
+        }),
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "No se pudo componer");
       setFinalUrl(URL.createObjectURL(await res.blob()));

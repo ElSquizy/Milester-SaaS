@@ -6,7 +6,7 @@ import DescriptionEditor, { type Tmpl } from "./DescriptionEditor";
 import ImageTab from "./ImageTab";
 import type { TemplateData } from "@/lib/descriptionTemplates";
 
-type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string };
+type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number };
 
 type Product = {
   id: number;

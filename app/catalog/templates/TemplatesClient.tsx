@@ -1,12 +1,12 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { renderTemplate, sampleData, parseFields } from "@/lib/descriptionTemplates";
 import ImageComposer from "../ImageComposer";
 
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
-type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; productCount: number };
+type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
 
 export default function TemplatesClient({ templates, imageTemplates }: { templates: Tmpl[]; imageTemplates: ImgTmpl[] }) {
   const router = useRouter();
@@ -135,19 +135,62 @@ function ImageTemplatesView({ imageTemplates }: { imageTemplates: ImgTmpl[] }) {
   );
 }
 
+// A neutral placeholder "product" so the shadow silhouette is solid in previews.
+function placeholderProduct(): string {
+  if (typeof document === "undefined") return "";
+  const c = document.createElement("canvas");
+  c.width = 670; c.height = 670;
+  const x = c.getContext("2d")!;
+  x.fillStyle = "#cbd5e1";
+  x.beginPath(); x.roundRect(0, 0, 670, 670, 16); x.fill();
+  x.fillStyle = "#94a3b8"; x.font = "600 34px system-ui"; x.textAlign = "center";
+  x.fillText("producto", 335, 345);
+  return c.toDataURL("image/png");
+}
+
 function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
   template: ImgTmpl; busy: boolean; setBusy: (b: boolean) => void; onDelete: () => void; onSaved: () => void;
 }) {
   const [name, setName] = useState(template.name);
   const [backgroundUrl, setBackgroundUrl] = useState(template.backgroundUrl);
   const [coverUrl, setCoverUrl] = useState(template.coverUrl);
+  const [sx, setSx] = useState(template.shadowOffsetX);
+  const [sy, setSy] = useState(template.shadowOffsetY);
+  const [blur, setBlur] = useState(template.shadowBlur);
+  const [opacity, setOpacity] = useState(template.shadowOpacity);
   const [saved, setSaved] = useState(false);
+
+  const [preview, setPreview] = useState<string | null>(null);
+  const [composing, setComposing] = useState(false);
+  const placeholder = useMemo(placeholderProduct, []);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced server compose so the shadow shows for real and updates as you tune it.
+  useEffect(() => {
+    if (!backgroundUrl && !coverUrl) { setPreview(null); return; }
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      setComposing(true);
+      try {
+        const res = await fetch("/api/compose", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ backgroundUrl, coverUrl, productUrl: placeholder, shadow: { offsetX: sx, offsetY: sy, blur, opacity } }),
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          setPreview((prev) => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(blob); });
+        }
+      } finally { setComposing(false); }
+    }, 450);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backgroundUrl, coverUrl, sx, sy, blur, opacity, placeholder]);
 
   async function save() {
     setBusy(true);
     await fetch(`/api/image-templates/${template.id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, backgroundUrl, coverUrl }),
+      body: JSON.stringify({ name, backgroundUrl, coverUrl, shadowOffsetX: sx, shadowOffsetY: sy, shadowBlur: blur, shadowOpacity: opacity }),
     });
     setBusy(false);
     setSaved(true); setTimeout(() => setSaved(false), 2500);
@@ -166,19 +209,50 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
           <input className="input" value={backgroundUrl} onChange={(e) => setBackgroundUrl(e.target.value)} placeholder="https://…/fondo.png" style={{ marginTop: 5, fontSize: "0.8125rem" }} />
         </div>
         <div>
-          <label style={lbl}>URL del cover (marco) <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>— 670×763, va arriba</span></label>
+          <label style={lbl}>URL del cover (marco) <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>— 670×763, sin sombra</span></label>
           <input className="input" value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://…/cover-ps5.png" style={{ marginTop: 5, fontSize: "0.8125rem" }} />
         </div>
+
+        {/* Shadow controls */}
+        <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Sombra</div>
+          <Slider label="Horizontal" value={sx} min={-60} max={60} step={1} onChange={setSx} suffix="px" />
+          <Slider label="Vertical" value={sy} min={-60} max={60} step={1} onChange={setSy} suffix="px" />
+          <Slider label="Difuminado" value={blur} min={0} max={60} step={1} onChange={setBlur} suffix="px" />
+          <Slider label="Opacidad" value={opacity} min={0} max={1} step={0.05} onChange={setOpacity} pct />
+        </div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 4 }}>
           <button className="btn-primary" onClick={save} disabled={busy}>{saved ? "Guardado ✓" : "Guardar"}</button>
           <button className="btn-secondary" onClick={onDelete} disabled={busy} style={{ color: "var(--color-danger)" }}>Eliminar</button>
         </div>
       </div>
       <div style={{ flex: 1, borderLeft: "1px solid var(--color-divider)", overflowY: "auto", padding: 20, background: "var(--color-surface-2)", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
-        <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 12, alignSelf: "flex-start" }}>Vista previa (fondo + cover)</div>
-        <ImageComposer backgroundUrl={backgroundUrl} coverUrl={coverUrl} size={360} />
-        <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 12, textAlign: "center" }}>La imagen del producto se agrega por producto, entre el fondo y el cover.</p>
+        <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 12, alignSelf: "flex-start" }}>
+          Vista previa {composing && <span style={{ color: "var(--color-faint)" }}>· componiendo…</span>}
+        </div>
+        {preview ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="" style={{ width: 360, maxWidth: "100%", aspectRatio: "1/1", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)" }} />
+        ) : (
+          <ImageComposer backgroundUrl={backgroundUrl} coverUrl={coverUrl} size={360} />
+        )}
+        <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 12, textAlign: "center" }}>La imagen “producto” es un marcador; cada producto pone la suya. La sombra se genera automáticamente.</p>
       </div>
+    </div>
+  );
+}
+
+function Slider({ label, value, min, max, step, onChange, suffix, pct }: {
+  label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; suffix?: string; pct?: boolean;
+}) {
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--color-muted)", marginBottom: 4 }}>
+        <span>{label}</span>
+        <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>{pct ? `${Math.round(value * 100)}%` : `${value}${suffix || ""}`}</span>
+      </div>
+      <input type="range" value={value} min={min} max={max} step={step} onChange={(e) => onChange(parseFloat(e.target.value))} style={{ width: "100%", accentColor: "var(--color-brand)" }} />
     </div>
   );
 }

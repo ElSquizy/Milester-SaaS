@@ -93,6 +93,10 @@ model ImageTemplate {
   name          String
   backgroundUrl String                        // canvas/background layer (1024x1024)
   coverUrl      String                        // frame layer (670x763), drawn on top
+  shadowOffsetX Int       @default(-6)         // generated drop-shadow params
+  shadowOffsetY Int       @default(18)
+  shadowBlur    Int       @default(20)
+  shadowOpacity Float     @default(0.5)
   products      Product[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
