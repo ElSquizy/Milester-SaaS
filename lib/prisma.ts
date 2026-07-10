@@ -2,12 +2,23 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaLibSql } from "@prisma/adapter-libsql";
 
 function createPrismaClient() {
-  // Production (Vercel) → Turso/libSQL cloud via env vars.
-  // Local dev → the on-disk SQLite file when no Turso URL is set.
-  const url = process.env.TURSO_DATABASE_URL || "file:./prisma/dev.db";
+  const tursoUrl = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
-  const adapter = new PrismaLibSql(authToken ? { url, authToken } : { url });
-  return new PrismaClient({ adapter } as ConstructorParameters<typeof PrismaClient>[0]);
+
+  // Single source of truth: local dev and production both connect directly to
+  // Turso. (Embedded replicas fail on Windows — atomic-rename access error — so
+  // we keep it simple and consistent.) On Vercel this is fast because the
+  // functions run in the same region as the database (see vercel.json).
+  if (tursoUrl && authToken) {
+    return new PrismaClient({
+      adapter: new PrismaLibSql({ url: tursoUrl, authToken }),
+    } as ConstructorParameters<typeof PrismaClient>[0]);
+  }
+
+  // No Turso configured → plain local SQLite file (offline dev).
+  return new PrismaClient({
+    adapter: new PrismaLibSql({ url: "file:./prisma/dev.db" }),
+  } as ConstructorParameters<typeof PrismaClient>[0]);
 }
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
