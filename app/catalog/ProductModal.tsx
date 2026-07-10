@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import CollectionPicker from "./CollectionPicker";
 import VariantsManager from "./VariantsManager";
 import DescriptionEditor, { type Tmpl } from "./DescriptionEditor";
-import ImageComposer from "./ImageComposer";
+import ImageTab from "./ImageTab";
 import type { TemplateData } from "@/lib/descriptionTemplates";
 
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string };
@@ -248,36 +248,15 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
               />
             )}
 
-            {tab === "imagen" && (() => {
-              const sel = imageTemplates.find((t) => t.id === imgTmplId) || null;
-              return (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28, alignItems: "start" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-                    <Field label="Plantilla de imagen">
-                      <select className="input" value={imgTmplId ?? ""} onChange={(e) => setImgTmplId(e.target.value ? Number(e.target.value) : null)}>
-                        <option value="">Sin plantilla (imagen simple)</option>
-                        {imageTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                      {imageTemplates.length === 0 && (
-                        <p style={{ marginTop: 6, fontSize: "0.75rem", color: "var(--color-subtle)" }}>
-                          No hay plantillas de imagen. Creá una en <a href="/catalog/templates" style={{ color: "var(--color-brand)" }}>Plantillas → Imágenes</a>.
-                        </p>
-                      )}
-                    </Field>
-                    <Field label="Imagen del producto (URL)" hint="1:1">
-                      <input className="input" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} placeholder="https://…/producto.png" style={{ fontSize: "0.8125rem" }} />
-                    </Field>
-                    <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", lineHeight: 1.5, margin: 0 }}>
-                      La imagen del producto se ubica centrada, entre el fondo y el cover. Si es más grande, se reescala al centro.
-                    </p>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 10 }}>Vista previa</div>
-                    <ImageComposer backgroundUrl={sel?.backgroundUrl} coverUrl={sel?.coverUrl} productUrl={productImageUrl || imageUrl} size={360} />
-                  </div>
-                </div>
-              );
-            })()}
+            {tab === "imagen" && (
+              <ImageTab
+                productId={product.id}
+                imageTemplates={imageTemplates}
+                imgTmplId={imgTmplId} setImgTmplId={setImgTmplId}
+                productImageUrl={productImageUrl} setProductImageUrl={setProductImageUrl}
+                fallbackImageUrl={imageUrl}
+              />
+            )}
 
             {tab === "variantes" && <VariantsManager productId={product.id} />}
 
