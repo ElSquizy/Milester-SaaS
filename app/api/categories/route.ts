@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { createCategoryInTiendaNube } from "@/lib/categories";
 
 /** POST: create a new category (optionally a subcategory) in Tienda Nube + locally. */
 export async function POST(req: Request) {
   const { name, parentTnId } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: "Falta el nombre" }, { status: 400 });
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
   try {
-    const cat = await createCategoryInTiendaNube(settings.storeId, settings.accessToken, name, parentTnId || null);
+    const cat = await createCategoryInTiendaNube(creds.storeId, creds.accessToken, name, parentTnId || null);
     return NextResponse.json(cat);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });

@@ -3,8 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { getTiendaNubeClient } from "@/lib/tiendanube";
 import { composeProductImage } from "@/lib/composeImage";
 import { getCreds } from "@/lib/creds";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
+
+// Compose + upload to TN is the heaviest path — cap uploads per IP strictly.
+const MAX_UPLOADS_PER_MIN = 6;
 
 /**
  * Composes the product image from its image template + product-layer URL and
@@ -13,6 +17,10 @@ export const runtime = "nodejs";
  * never leaves the product without a picture.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = rateLimit(`imgupload:${clientIp(req)}`, MAX_UPLOADS_PER_MIN, 60_000);
+  if (!gate.ok) {
+    return NextResponse.json({ error: "Demasiadas imágenes por minuto. Esperá un momento." }, { status: 429, headers: { "Retry-After": String(gate.retryAfter) } });
+  }
   const { id } = await params;
   const productId = Number(id);
   const body = await req.json().catch(() => ({}));

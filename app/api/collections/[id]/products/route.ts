@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { getCollectionProducts, setCollectionMembership } from "@/lib/collections";
 
 /** GET: products currently in the collection. */
@@ -17,8 +17,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const categoryId = Number(id);
   if (isNaN(categoryId)) return NextResponse.json({ error: "Id inválido" }, { status: 400 });
 
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
 
@@ -28,8 +28,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     const result = await setCollectionMembership(categoryId, add, remove, {
-      storeId: settings.storeId,
-      accessToken: settings.accessToken,
+      storeId: creds.storeId,
+      accessToken: creds.accessToken,
     });
     return NextResponse.json(result);
   } catch (err) {

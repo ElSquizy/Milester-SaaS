@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncOneProduct, deleteOneProduct } from "@/lib/sync";
+import { getCreds } from "@/lib/creds";
 
 /** GET: stream a batch sync of all products with local changes (syncStatus = "modified"). */
 export async function GET() {
@@ -13,13 +14,12 @@ export async function GET() {
       }
 
       try {
-        const settings = await prisma.settings.findFirst();
-        if (!settings?.storeId || !settings.accessToken) {
+        const creds = await getCreds();
+        if (!creds) {
           send({ status: "error", message: "Conectá tu tienda primero (Configuración)" });
           controller.close();
           return;
         }
-        const creds = { storeId: settings.storeId, accessToken: settings.accessToken };
 
         const pending = await prisma.product.findMany({
           where: { OR: [{ syncStatus: "modified" }, { pendingDelete: true }] },

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { importOrdersFromTiendaNube, type TiendaNubeOrder } from "@/lib/tiendanube";
 import { mapOrderFields, mapCustomerFields, mapItemFields } from "@/lib/orderMap";
 
@@ -14,8 +15,8 @@ export async function GET() {
       }
 
       try {
-        const settings = await prisma.settings.findFirst();
-        if (!settings?.storeId || !settings.accessToken) {
+        const creds = await getCreds();
+        if (!creds) {
           send({ status: "error", message: "Conectá tu tienda primero (Configuración)" });
           controller.close();
           return;
@@ -24,8 +25,8 @@ export async function GET() {
         send({ status: "fetching", message: "Conectando con Tienda Nube..." });
 
         const orders: TiendaNubeOrder[] = await importOrdersFromTiendaNube(
-          settings.storeId,
-          settings.accessToken,
+          creds.storeId,
+          creds.accessToken,
           (count) => send({ status: "fetching", message: `${count} órdenes descargadas...`, fetched: count })
         );
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { duplicateCollection } from "@/lib/collections";
 
 /** POST: duplicate a collection (name + same products) into Tienda Nube. */
@@ -8,13 +8,13 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const categoryId = Number(id);
   if (isNaN(categoryId)) return NextResponse.json({ error: "Id inválido" }, { status: 400 });
 
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
 
   try {
-    const res = await duplicateCollection(categoryId, { storeId: settings.storeId, accessToken: settings.accessToken });
+    const res = await duplicateCollection(categoryId, { storeId: creds.storeId, accessToken: creds.accessToken });
     return NextResponse.json(res);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });

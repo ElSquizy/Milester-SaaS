@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { applyIncoming, dismissIncoming } from "@/lib/changes";
 
 /** POST: apply or dismiss incoming changes. Body { tiendaNubeIds?: string[], all?: boolean, action: "apply" | "dismiss" } */
 export async function POST(req: Request) {
   const { tiendaNubeIds, all, action } = await req.json();
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
 
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
       await dismissIncoming(ids);
       return NextResponse.json({ ok: true, dismissed: ids.length });
     }
-    const r = await applyIncoming(ids, settings.storeId, settings.accessToken);
+    const r = await applyIncoming(ids, creds.storeId, creds.accessToken);
     return NextResponse.json({ ok: true, ...r });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });

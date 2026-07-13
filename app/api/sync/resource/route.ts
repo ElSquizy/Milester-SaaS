@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { syncCategoryTree } from "@/lib/categories";
 import { syncCustomersFromTiendaNube } from "@/lib/customerSync";
 import { syncOrdersIncremental } from "@/lib/salesSync";
@@ -15,11 +16,11 @@ type Resource = "catalog" | "collections" | "campaigns" | "sales" | "customers" 
  * Returns { resource, summary } plus resource-specific counts.
  */
 export async function POST(req: Request) {
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
-  const { storeId, accessToken } = settings;
+  const { storeId, accessToken } = creds;
 
   const body = await req.json().catch(() => ({}));
   const resource = body.resource as Resource;

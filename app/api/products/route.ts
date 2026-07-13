@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { syncProductToTiendaNube } from "@/lib/tiendanube";
 
 export async function GET() {
@@ -29,10 +30,10 @@ export async function POST(req: Request) {
     include: { variants: true },
   });
 
-  const settings = await prisma.settings.findFirst();
-  if (settings?.storeId && settings.accessToken) {
+  const creds = await getCreds();
+  if (creds) {
     try {
-      const tnProduct = await syncProductToTiendaNube(settings.storeId, settings.accessToken, {
+      const tnProduct = await syncProductToTiendaNube(creds.storeId, creds.accessToken, {
         name: product.name,
         description: product.description,
         price: product.price,

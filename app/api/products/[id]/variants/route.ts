@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getProductVariants, applyProductVariants } from "@/lib/variants";
+import { getCreds } from "@/lib/creds";
 
 async function creds() {
-  const s = await prisma.settings.findFirst();
-  return s?.storeId && s.accessToken ? { storeId: s.storeId, accessToken: s.accessToken } : undefined;
+  return (await getCreds()) ?? undefined;
 }
 
 /** GET: a product's variants + attribute names. Live from TN, or ?local=1 for the local mirror. */

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncOneProduct, deleteOneProduct } from "@/lib/sync";
+import { getCreds } from "@/lib/creds";
 
 /** POST: force-push a single product to Tienda Nube now (create/update, or delete if staged). */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -8,11 +9,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const productId = Number(id);
   if (isNaN(productId)) return NextResponse.json({ error: "Id inválido" }, { status: 400 });
 
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
-    return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
-  }
-  const creds = { storeId: settings.storeId, accessToken: settings.accessToken };
+  const creds = await getCreds();
+  if (!creds) return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
 
   const product = await prisma.product.findUnique({ where: { id: productId }, select: { pendingDelete: true } });
   if (!product) return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });

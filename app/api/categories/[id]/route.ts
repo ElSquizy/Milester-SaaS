@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getCreds } from "@/lib/creds";
 import { deleteCategoryLocalAndTn, moveCategory } from "@/lib/categories";
 
 /** PATCH: move a collection under a new parent. Body { parentTnId: string | null }. */
@@ -8,13 +8,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const categoryId = Number(id);
   if (isNaN(categoryId)) return NextResponse.json({ error: "Id inválido" }, { status: 400 });
 
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
   const body = await req.json().catch(() => ({}));
   try {
-    const res = await moveCategory(categoryId, body.parentTnId ?? null, { storeId: settings.storeId, accessToken: settings.accessToken });
+    const res = await moveCategory(categoryId, body.parentTnId ?? null, { storeId: creds.storeId, accessToken: creds.accessToken });
     return NextResponse.json(res);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
@@ -27,13 +27,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const categoryId = Number(id);
   if (isNaN(categoryId)) return NextResponse.json({ error: "Id inválido" }, { status: 400 });
 
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
+  const creds = await getCreds();
+  if (!creds) {
     return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
   }
 
   try {
-    const res = await deleteCategoryLocalAndTn(categoryId, { storeId: settings.storeId, accessToken: settings.accessToken });
+    const res = await deleteCategoryLocalAndTn(categoryId, { storeId: creds.storeId, accessToken: creds.accessToken });
     return NextResponse.json(res);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });

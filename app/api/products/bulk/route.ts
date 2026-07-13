@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { duplicateProduct } from "@/lib/products";
+import { getCreds } from "@/lib/creds";
 
 /**
  * Bulk actions update products LOCALLY and mark them as "modified".
@@ -80,8 +81,7 @@ export async function POST(req: Request) {
 
     // Duplicate each selected product into a staged local copy (created on TN at next sync).
     if (action === "duplicate") {
-      const s = await prisma.settings.findFirst();
-      const creds = s?.storeId && s.accessToken ? { storeId: s.storeId, accessToken: s.accessToken } : undefined;
+      const creds = (await getCreds()) ?? undefined;
       for (const id of ids) {
         await duplicateProduct(id, creds);
         updated++;
