@@ -10,6 +10,10 @@ export async function proxy(request: NextRequest) {
 
   const isApi = pathname.startsWith("/api");
 
+  // The scheduler endpoint guards itself with CRON_SECRET — let external crons
+  // reach it without the login cookie (and even during maintenance).
+  if (pathname === "/api/cron") return NextResponse.next();
+
   // Kill switch: everything down except the maintenance page it rewrites to.
   if (process.env.MILESTER_ENABLED === "false" && pathname !== "/maintenance") {
     if (isApi) return NextResponse.json({ error: "Servicio en mantenimiento" }, { status: 503 });

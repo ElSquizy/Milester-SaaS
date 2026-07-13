@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, authToken } from "@/lib/authToken";
+import { rateLimit, rateLimitReset, clientIp } from "@/lib/rateLimit";
+
+const MAX_ATTEMPTS = 8;
+const WINDOW_MS = 5 * 60_000; // 5 minutes
 
 export async function POST(req: Request) {
+  const key = `login:${clientIp(req)}`;
+  const gate = rateLimit(key, MAX_ATTEMPTS, WINDOW_MS);
+  if (!gate.ok) {
+    return NextResponse.json(
+      { error: "Demasiados intentos. Esperá unos minutos." },
+      { status: 429, headers: { "Retry-After": String(gate.retryAfter) } },
+    );
+  }
+
   const { password } = await req.json().catch(() => ({}));
   const expected = process.env.MILESTER_PASSWORD;
 
@@ -10,6 +23,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Contraseña incorrecta." }, { status: 401 });
   }
 
+  rateLimitReset(key); // honest user succeeded — don't hold failed attempts against them
   const res = NextResponse.json({ ok: true });
   res.cookies.set(AUTH_COOKIE, await authToken(expected), {
     httpOnly: true,

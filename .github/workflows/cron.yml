@@ -1,0 +1,20 @@
+name: Milester scheduler
+
+# Hits the durable scheduler endpoint so campaigns activate/end and data syncs
+# even when nobody has the app open. Requires two repo secrets:
+#   CRON_SECRET  — same value set in Vercel env
+#   APP_URL      — deployed base URL, e.g. https://milester-saas.vercel.app
+on:
+  schedule:
+    - cron: "*/10 * * * *" # every 10 minutes (GitHub may delay a few minutes)
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger scheduler
+        run: |
+          curl -fsS -m 90 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron" || echo "scheduler ping failed (app may be redeploying)"
