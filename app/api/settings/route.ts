@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { invalidateCreds } from "@/lib/creds";
 
 export async function GET() {
   const settings = await prisma.settings.findFirst();
@@ -30,8 +31,10 @@ export async function POST(req: Request) {
 
   if (existing) {
     const updated = await prisma.settings.update({ where: { id: existing.id }, data });
+    invalidateCreds();
     return NextResponse.json({ ok: true, id: updated.id });
   }
   const created = await prisma.settings.create({ data });
+  invalidateCreds();
   return NextResponse.json({ ok: true, id: created.id });
 }

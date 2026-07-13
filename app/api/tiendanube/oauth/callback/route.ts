@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { invalidateCreds } from "@/lib/creds";
 
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
         oauthState: null,
       },
     });
+    invalidateCreds();
 
     return NextResponse.redirect(new URL("/settings?connected=1", APP_URL));
   } catch (err) {

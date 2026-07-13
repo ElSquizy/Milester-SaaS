@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getTiendaNubeClient } from "@/lib/tiendanube";
 import { composeProductImage } from "@/lib/composeImage";
+import { getCreds } from "@/lib/creds";
 
 export const runtime = "nodejs";
 
@@ -23,10 +24,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!product) return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
   if (!product.tiendaNubeId) return NextResponse.json({ error: "El producto no existe en Tienda Nube todavía" }, { status: 400 });
 
-  const settings = await prisma.settings.findFirst();
-  if (!settings?.storeId || !settings.accessToken) {
-    return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
-  }
+  const creds = await getCreds();
+  if (!creds) return NextResponse.json({ error: "Conectá tu tienda primero" }, { status: 400 });
 
   const backgroundUrl = body.backgroundUrl ?? product.imageTemplate?.backgroundUrl;
   const coverUrl = body.coverUrl ?? product.imageTemplate?.coverUrl;
@@ -41,7 +40,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const png = await composeProductImage({ backgroundUrl, coverUrl, productUrl, shadow });
     const attachment = png.toString("base64");
-    const client = getTiendaNubeClient(settings.storeId, settings.accessToken);
+    const client = getTiendaNubeClient(creds.storeId, creds.accessToken);
 
     // Capture existing images to remove after a successful upload.
     const existing = await client.get(`/products/${product.tiendaNubeId}/images`);
