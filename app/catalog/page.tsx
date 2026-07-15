@@ -66,15 +66,23 @@ export default async function CatalogPage({
   for (const v of fl.inc) { const c = flagCond(v); if (c) AND.push(c); }   // include flags: all of
   for (const v of fl.exc) { const c = flagCond(v); if (c) AND.push({ NOT: c }); }
 
+  // Focus mode: the working set lives in the browser, so its ids travel in the
+  // URL. We only ever receive ids — the products themselves are read fresh here.
+  const focusIds = (sp.focus || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
+  if (focusIds.length) AND.push({ id: { in: focusIds } });
+
   const where: Prisma.ProductWhereInput = AND.length ? { AND } : {};
 
+  // Creation-based sorts are stable: editing a product must not reshuffle the
+  // list under you. Ordering by updatedAt is opt-in ("edited").
   const orderBy =
-    sort === "oldest" ? { updatedAt: "asc" as const }
+    sort === "oldest" ? { createdAt: "asc" as const }
+    : sort === "edited" ? { updatedAt: "desc" as const }
     : sort === "best-selling" ? { unitsSold: "desc" as const }
     : sort === "worst-selling" ? { unitsSold: "asc" as const }
     : sort === "price-high" ? { price: "desc" as const }
     : sort === "price-low" ? { price: "asc" as const }
-    : { updatedAt: "desc" as const };
+    : { createdAt: "desc" as const };
 
   const [total, products, categories, pendingCount] = await Promise.all([
     prisma.product.count({ where }),

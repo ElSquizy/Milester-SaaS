@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { isInFocus, toggleFocus } from "./useFocus";
 
 export type MenuTarget = { id: number; name: string; pendingDelete: boolean; syncStatus: string; x: number; y: number };
 
@@ -44,6 +45,10 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
   // Only meaningful while the change hasn't been pushed: once synced, TN *is* the
   // new version and undoing belongs in Actividad (as a fresh change).
   const hasPending = target.syncStatus === "modified" || target.syncStatus === "error" || target.pendingDelete;
+
+  // Focus is a local scratchpad: toggling is instant, no server round-trip.
+  const inFocus = isInFocus(target.id);
+  const flipFocus = () => { toggleFocus(target.id); onClose(); };
   const stageDelete = () => run("del", () => fetch("/api/products/bulk", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids: [target.id], action: "stage-delete" }),
@@ -67,6 +72,14 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
       <div style={{ padding: "6px 10px 8px", fontSize: "0.6875rem", color: "var(--color-subtle)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", borderBottom: "1px solid var(--color-divider)", marginBottom: 4 }}>
         {target.name}
       </div>
+
+      <MenuItem onClick={flipFocus} icon={inFocus
+        ? <><circle cx="12" cy="12" r="9" /><line x1="9" y1="12" x2="15" y2="12" /></>
+        : <><circle cx="12" cy="12" r="9" /><line x1="12" y1="9" x2="12" y2="15" /><line x1="9" y1="12" x2="15" y2="12" /></>}>
+        {inFocus ? "Quitar del foco" : "Agregar al foco"}
+      </MenuItem>
+
+      <div style={{ height: 1, background: "var(--color-divider)", margin: "4px 0" }} />
 
       <MenuItem onClick={duplicate} busy={busy === "dup"} icon={<><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>}>
         Duplicar

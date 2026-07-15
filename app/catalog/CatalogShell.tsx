@@ -9,6 +9,7 @@ import ProductPanel from "./ProductPanel";
 import BulkBar from "./BulkBar";
 import ProductModal from "./ProductModal";
 import ProductContextMenu, { type MenuTarget } from "./ProductContextMenu";
+import { useFocus } from "./useFocus";
 
 type EditProduct = {
   id: number;
@@ -203,6 +204,23 @@ export default function CatalogShell({
   const [advanced, setAdvanced] = useState(false);
   // Lives here (not in the modal) so it survives moving between products.
   const [modalTab, setModalTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo">("general");
+
+  // Focus set (browser-local). Entering focus just filters the catalog to those
+  // ids, so the modal's prev/next then walks the working set for free.
+  const focus = useFocus();
+  const focusActive = !!searchParams.get("focus");
+  function enterFocus() {
+    if (focus.count === 0) return;
+    const p = new URLSearchParams();
+    p.set("focus", focus.ids.join(","));
+    router.push(`${pathname}?${p.toString()}`);
+  }
+  function exitFocus() {
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete("focus");
+    p.delete("edit");
+    router.push(`${pathname}?${p.toString()}`);
+  }
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
 
   const openMenu = useCallback((e: React.MouseEvent, p: CatalogProduct) => {
@@ -310,6 +328,29 @@ export default function CatalogShell({
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {/* Focus chip: the working set you curate with right-click → "Agregar al foco" */}
+            {(focus.count > 0 || focusActive) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button
+                  onClick={() => focusActive ? exitFocus() : enterFocus()}
+                  className="pill"
+                  style={{
+                    cursor: "pointer", padding: "8px 13px", fontSize: "0.8125rem", fontWeight: 600, border: "1px solid transparent",
+                    background: focusActive ? "var(--color-brand)" : "var(--color-brand-light)",
+                    color: focusActive ? "var(--color-brand-ink)" : "var(--color-brand)",
+                  }}
+                  title={focusActive ? "Volver al catálogo completo" : "Ver solo los productos del foco"}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="3.5" /></svg>
+                  {focusActive ? `Foco · ${focus.count}` : `Foco: ${focus.count}`}
+                </button>
+                {focusActive && (
+                  <button onClick={() => { focus.clear(); exitFocus(); }} title="Vaciar el foco" className="btn-secondary" style={{ padding: "6px 9px", fontSize: "0.75rem" }}>
+                    Vaciar
+                  </button>
+                )}
+              </div>
+            )}
             <Link href="/catalog/templates" className="btn-secondary" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.8125rem" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
               Plantillas
@@ -368,6 +409,7 @@ export default function CatalogShell({
             >
               <option value="recent">Más recientes</option>
               <option value="oldest">Más antiguos</option>
+              <option value="edited">Editados recientemente</option>
               <option value="best-selling">Más vendidos</option>
               <option value="worst-selling">Menos vendidos</option>
               <option value="price-high">Mayor precio</option>
