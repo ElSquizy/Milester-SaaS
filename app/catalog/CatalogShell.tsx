@@ -201,6 +201,8 @@ export default function CatalogShell({
   const [localQ, setLocalQ] = useState(currentQ);
   const [view, setView] = useState<"table" | "cards">("table");
   const [advanced, setAdvanced] = useState(false);
+  // Lives here (not in the modal) so it survives moving between products.
+  const [modalTab, setModalTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo">("general");
   const [menuTarget, setMenuTarget] = useState<MenuTarget | null>(null);
 
   const openMenu = useCallback((e: React.MouseEvent, p: CatalogProduct) => {
@@ -246,6 +248,15 @@ export default function CatalogShell({
     const p = new URLSearchParams(searchParams.toString());
     p.set("edit", String(id));
     router.push(`${pathname}?${p.toString()}`);
+  }
+
+  // Move to the previous/next product without leaving the advanced modal, so you
+  // can sweep a list staying on the same tab.
+  const editIndex = editProduct ? products.findIndex((p) => p.id === editProduct.id) : -1;
+  function navigateEdit(delta: number) {
+    if (editIndex < 0) return;
+    const next = products[editIndex + delta];
+    if (next) openEdit(next.id);
   }
 
   function closeEdit() {
@@ -445,7 +456,13 @@ export default function CatalogShell({
         {/* Advanced-edit center modal */}
         {editProduct && advanced && (
           <ProductModal
+            key={editProduct.id}
             product={editProduct}
+            tab={modalTab}
+            setTab={setModalTab}
+            navIndex={editIndex}
+            navTotal={products.length}
+            onNavigate={navigateEdit}
             onClose={() => setAdvanced(false)}
             onSaved={closeEdit}
           />

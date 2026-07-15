@@ -27,13 +27,20 @@ type Product = {
   categoryChips: Array<{ id: number; name: string }>;
 };
 
+type Tab = "general" | "descripcion" | "imagen" | "variantes" | "seo";
+
 interface Props {
   product: Product;
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  navIndex?: number;                    // position within the current list
+  navTotal?: number;
+  onNavigate?: (delta: number) => void; // move to prev/next product, same tab
   onClose: () => void;   // back to the side panel
   onSaved: () => void;   // fully close
 }
 
-export default function ProductModal({ product, onClose, onSaved }: Props) {
+export default function ProductModal({ product, tab, setTab, navIndex, navTotal, onNavigate, onClose, onSaved }: Props) {
   const [name, setName] = useState(product.name);
   const [sku, setSku] = useState(product.sku || "");
   const [description, setDescription] = useState(product.description || "");
@@ -56,7 +63,6 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo">("general");
 
   useEffect(() => {
     fetch("/api/description-templates").then((r) => r.json()).then(setTemplates).catch(() => {});
@@ -70,21 +76,36 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
   if (initialSig.current === null) initialSig.current = currentSig;
   const dirty = initialSig.current !== currentSig;
 
-  // When closing with unsaved changes, hold the intended close action and ask
-  // the user: save, discard, or cancel. When clean, close immediately.
+  // When leaving (closing OR moving to another product) with unsaved changes,
+  // hold the intended action and ask: save, discard, or cancel. The dialog's
+  // "Guardar cambios" therefore doubles as "guardar y siguiente".
   const [pendingClose, setPendingClose] = useState<null | { run: () => void }>(null);
   function requestClose(fn: () => void) {
     if (dirty) setPendingClose({ run: fn });
     else fn();
   }
 
-  // ESC also triggers the same guard.
+  // navIndex is -1 when the edited product isn't part of the current list
+  // (e.g. opened by URL while the page shows other results) — then we can't walk it.
+  const inList = navIndex !== undefined && navIndex >= 0;
+  const canPrev = !!onNavigate && inList && navIndex! > 0;
+  const canNext = !!onNavigate && inList && navTotal !== undefined && navIndex! < navTotal - 1;
+  function go(delta: number) {
+    if (!onNavigate) return;
+    requestClose(() => onNavigate(delta));
+  }
+
+  // ESC closes; Alt+←/→ moves between products (Alt so arrows still work in inputs).
   useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") requestClose(onClose); }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") return requestClose(onClose);
+      if (e.altKey && e.key === "ArrowLeft" && canPrev) { e.preventDefault(); go(-1); }
+      if (e.altKey && e.key === "ArrowRight" && canNext) { e.preventDefault(); go(1); }
+    }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty]);
+  }, [dirty, canPrev, canNext]);
 
   const catNameById = new Map<number, string>([
     ...product.categoryChips.map((c) => [c.id, c.name] as [number, string]),
@@ -176,13 +197,30 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
               </button>
               <div>
-                <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--color-ink)" }}>Edición avanzada</div>
+                <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 420 }}>{product.name}</div>
                 <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>ID {product.id}{product.sku && ` · ${product.sku}`}</div>
               </div>
             </div>
-            <button onClick={() => requestClose(onSaved)} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-muted)" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-            </button>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* Move between products without leaving the tab you're working on */}
+              {onNavigate && inList && navTotal !== undefined && navTotal > 1 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginRight: 4 }}>
+                  <button onClick={() => go(-1)} disabled={!canPrev} title="Producto anterior (Alt + ←)" style={navBtn(!canPrev)}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                  </button>
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums", minWidth: 52, textAlign: "center" }}>
+                    {(navIndex ?? 0) + 1} / {navTotal}
+                  </span>
+                  <button onClick={() => go(1)} disabled={!canNext} title="Producto siguiente (Alt + →)" style={navBtn(!canNext)}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                  </button>
+                </div>
+              )}
+              <button onClick={() => requestClose(onSaved)} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-muted)" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
           </div>
 
           {/* Tab bar */}
@@ -328,6 +366,14 @@ export default function ProductModal({ product, onClose, onSaved }: Props) {
     </>
   );
 }
+
+const navBtn = (disabled: boolean): React.CSSProperties => ({
+  width: 30, height: 30, borderRadius: 8,
+  border: "1px solid var(--color-border)", background: "var(--color-surface)",
+  cursor: disabled ? "default" : "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  color: disabled ? "var(--color-faint)" : "var(--color-muted)",
+});
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
