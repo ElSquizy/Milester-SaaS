@@ -152,6 +152,21 @@ export default function Sidebar() {
     runPull();
   }, [path, runPull, refreshPending]);
 
+  // The pending count used to refresh only on navigation, so edits made while
+  // staying on a page left the button stale. Poll it, and re-check as soon as
+  // the tab regains focus (after editing elsewhere).
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) refreshPending(); }, 10_000);
+    const onFocus = () => refreshPending();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [refreshPending]);
+
   return (
     <aside style={{
       width: 216,

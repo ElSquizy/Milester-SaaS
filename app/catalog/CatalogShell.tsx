@@ -207,7 +207,7 @@ export default function CatalogShell({
 
   const openMenu = useCallback((e: React.MouseEvent, p: CatalogProduct) => {
     e.preventDefault();
-    setMenuTarget({ id: p.id, name: p.name, pendingDelete: p.pendingDelete, x: e.clientX, y: e.clientY });
+    setMenuTarget({ id: p.id, name: p.name, pendingDelete: p.pendingDelete, syncStatus: p.syncStatus, x: e.clientX, y: e.clientY });
   }, []);
 
   // Persist the table/cards preference across sessions.

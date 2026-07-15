@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 
-export type MenuTarget = { id: number; name: string; pendingDelete: boolean; x: number; y: number };
+export type MenuTarget = { id: number; name: string; pendingDelete: boolean; syncStatus: string; x: number; y: number };
 
-/** Right-click context menu for a catalog product: duplicate, force-sync, stage/undo delete. */
+/** Right-click context menu for a catalog product: duplicate, force-sync, discard local changes, stage/undo delete. */
 export default function ProductContextMenu({ target, onClose, onDone }: {
   target: MenuTarget;
   onClose: () => void;
@@ -35,6 +35,15 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
   }
 
   const duplicate = () => run("dup", () => fetch(`/api/products/${target.id}/duplicate`, { method: "POST" }));
+  const forceSync = () => run("sync", () => fetch(`/api/products/${target.id}/sync`, { method: "POST" }));
+  const revert = () => {
+    if (!confirm(`¿Descartar los cambios sin sincronizar de "${target.name}"? Vuelve a la versión que está hoy en Tienda Nube.`)) return;
+    run("revert", () => fetch(`/api/products/${target.id}/revert`, { method: "POST" }));
+  };
+
+  // Only meaningful while the change hasn't been pushed: once synced, TN *is* the
+  // new version and undoing belongs in Actividad (as a fresh change).
+  const hasPending = target.syncStatus === "modified" || target.syncStatus === "error" || target.pendingDelete;
   const stageDelete = () => run("del", () => fetch("/api/products/bulk", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids: [target.id], action: "stage-delete" }),
@@ -62,6 +71,16 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
       <MenuItem onClick={duplicate} busy={busy === "dup"} icon={<><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>}>
         Duplicar
       </MenuItem>
+
+      <MenuItem onClick={forceSync} busy={busy === "sync"} icon={<><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></>}>
+        Forzar sincronización
+      </MenuItem>
+
+      {hasPending && (
+        <MenuItem onClick={revert} busy={busy === "revert"} icon={<><path d="M3 7v6h6" /><path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 8" /></>}>
+          Deshacer cambios
+        </MenuItem>
+      )}
 
       {target.pendingDelete ? (
         <MenuItem onClick={restore} busy={busy === "del"} icon={<><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></>}>

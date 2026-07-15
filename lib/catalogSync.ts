@@ -43,6 +43,7 @@ export async function upsertTnProducts(
   tnProducts: TNProduct[],
   categoryMap: Map<string, number>,
   onProgress?: (r: UpsertResult) => void,
+  opts?: { force?: boolean }, // force: overwrite even local edits (used by "discard changes")
 ): Promise<UpsertResult> {
   const existing = await prisma.product.findMany({
     where: { tiendaNubeId: { not: null } },
@@ -65,7 +66,7 @@ export async function upsertTnProducts(
 
     if (match) {
       // Protect in-flight local edits from being overwritten by the pull.
-      if (match.syncStatus === "modified" || match.syncStatus === "error") {
+      if (!opts?.force && (match.syncStatus === "modified" || match.syncStatus === "error")) {
         res.skipped++;
         onProgress?.(res);
         continue;
@@ -221,4 +222,57 @@ export async function syncCatalogFromTiendaNube(
   }
 
   return { collections: categoryMap.size, deleted, ...res };
+}
+
+/**
+ * Discards a product's un-pushed local edits by re-reading it from Tienda Nube,
+ * which still holds the last synced version. Restores product fields *and*
+ * variants (the regular pull ignores variants), then marks it clean.
+ * Only meaningful while the change hasn't been pushed yet.
+ */
+export async function revertProductFromTiendaNube(
+  productId: number,
+  creds: { storeId: string; accessToken: string },
+) {
+  const local = await prisma.product.findUnique({ where: { id: productId }, select: { tiendaNubeId: true } });
+  if (!local) throw new Error("Producto no encontrado");
+  if (!local.tiendaNubeId) throw new Error("Este producto todavía no existe en Tienda Nube: no hay versión anterior a la que volver.");
+
+  const client = getTiendaNubeClient(creds.storeId, creds.accessToken);
+  const { data: tnP } = await client.get(`/products/${local.tiendaNubeId}`);
+
+  // Product-level fields (force, so the local edits we're discarding get overwritten).
+  const categoryMap = await syncCategoryTree(creds.storeId, creds.accessToken);
+  await upsertTnProducts([tnP as TNProduct], categoryMap, undefined, { force: true });
+
+  // Variants: mirror Tienda Nube exactly (update, create, drop extras).
+  const tnVariants: TNVariant[] = tnP.variants || [];
+  const keptIds: number[] = [];
+  for (const v of tnVariants) {
+    const tnId = v.id != null ? String(v.id) : null;
+    const data = {
+      price: parseFloat(v.price || "0"),
+      promotionalPrice: promo(v),
+      stock: v.stock ?? null,
+      sku: v.sku ?? null,
+      values: JSON.stringify((v.values || []).map(loc)),
+    };
+    const existing = tnId ? await prisma.variant.findFirst({ where: { productId, tiendaNubeId: tnId }, select: { id: true } }) : null;
+    if (existing) {
+      await prisma.variant.update({ where: { id: existing.id }, data });
+      keptIds.push(existing.id);
+    } else {
+      const created = await prisma.variant.create({ data: { productId, tiendaNubeId: tnId, ...data } });
+      keptIds.push(created.id);
+    }
+  }
+  await prisma.variant.deleteMany({ where: { productId, id: { notIn: keptIds.length ? keptIds : [-1] } } });
+
+  // Clean slate: nothing pending for this product any more.
+  await prisma.product.update({
+    where: { id: productId },
+    data: { syncStatus: "synced", pendingDelete: false, lastSyncedAt: new Date() },
+  });
+
+  return { reverted: true, variants: tnVariants.length };
 }
