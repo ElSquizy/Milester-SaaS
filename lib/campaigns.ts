@@ -197,17 +197,27 @@ export async function endCampaign(campaignId: number) {
   if (!c) throw new Error("Campaña no encontrada");
 
   for (const item of c.items) {
+    // Another campaign may still be running on this product (e.g. one ends the
+    // moment the next starts). Hand the price over to it instead of clearing —
+    // otherwise the incoming campaign's discount gets wiped.
+    const takeover = await prisma.campaignItem.findFirst({
+      where: { productId: item.productId, campaignId: { not: campaignId }, campaign: { status: "active" } },
+      select: { campaignPrice: true },
+      orderBy: { id: "desc" },
+    });
+    const nextPromo = takeover ? takeover.campaignPrice : null;
+
     await prisma.$transaction([
       prisma.product.update({
         where: { id: item.productId },
         data: {
-          promotionalPrice: null,
+          promotionalPrice: nextPromo,
           syncStatus: "modified",
           ...(c.addTag ? { tags: removeTag(item.product.tags, c.addTag) } : {}),
         },
       }),
       prisma.changelog.create({
-        data: { productId: item.productId, field: "promotionalPrice", oldValue: String(item.campaignPrice), newValue: null },
+        data: { productId: item.productId, field: "promotionalPrice", oldValue: String(item.campaignPrice), newValue: nextPromo == null ? null : String(nextPromo) },
       }),
     ]);
     // Remove the campaign's category from the product (products leave the collection).
