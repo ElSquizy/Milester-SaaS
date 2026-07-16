@@ -55,6 +55,7 @@ model Product {
   infiniteStock  Boolean   @default(false)  // TN "stock ilimitado" (variante sin gestión de stock)
   attributes     String    @default("[]")   // JSON array of variant attribute names, e.g. ["Plataforma","Cuenta"]
   sku            String?
+  requiresShipping Boolean?                  // TN: false = Digital/Servicio. null = desconocido (no se envía)
   published      Boolean   @default(true)
   tags           String    @default("[]")
   variants       Variant[]

@@ -44,6 +44,7 @@ export async function syncOneProduct(
     variants: variantsToPush,
     attributes,
     published: product.published,
+    requiresShipping: product.requiresShipping,
     categoryIds: categoryTnIds,
     tags: tagsToTnString(product.tags),
   });

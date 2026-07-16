@@ -38,7 +38,9 @@ export async function getProductVariants(productId: number, creds?: Creds) {
       stock: v.stock ?? null,
       sku: v.sku ?? null,
     }));
-    return { attributes, variants, tiendaNubeId: product.tiendaNubeId };
+    // requires_shipping comes straight from TN so a duplicate keeps the product
+    // type (false = Digital/Servicio) even before a pull has recorded it.
+    return { attributes, variants, tiendaNubeId: product.tiendaNubeId, requiresShipping: data.requires_shipping ?? null };
   }
 
   const attributes: string[] = JSON.parse(product.attributes || "[]");
@@ -50,7 +52,7 @@ export async function getProductVariants(productId: number, creds?: Creds) {
     stock: v.stock,
     sku: v.sku,
   }));
-  return { attributes, variants, tiendaNubeId: product.tiendaNubeId };
+  return { attributes, variants, tiendaNubeId: product.tiendaNubeId, requiresShipping: product.requiresShipping };
 }
 
 type ApplyPayload = {
@@ -93,7 +95,8 @@ export async function applyProductVariants(productId: number, creds: Creds, payl
     const values = hasAttrs ? v.values.map((x) => ({ es: (x || "").trim() || "-" })) : undefined;
     // TN clears a variant's sale only with an empty string; a number sets it.
     const promoStr = v.promotionalPrice != null ? String(v.promotionalPrice) : "";
-    const body: any = { price: String(v.price), promotional_price: promoStr, stock: v.stock ?? null, sku: v.sku ?? null, ...(values ? { values } : {}) };
+    // Unlimited stock in TN is stock_management:false — stock:null alone isn't enough.
+    const body: any = { price: String(v.price), promotional_price: promoStr, stock_management: v.stock != null, stock: v.stock ?? null, sku: v.sku ?? null, ...(values ? { values } : {}) };
 
     if (v.tiendaNubeId) {
       if (client && tnId) await client.put(`/products/${tnId}/variants/${v.tiendaNubeId}`, body);

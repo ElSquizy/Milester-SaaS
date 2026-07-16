@@ -2,6 +2,9 @@ import axios from "axios";
 
 const BASE_URL = "https://api.tiendanube.com/v1";
 
+/** Tienda Nube throttles to a few requests per second and answers 429 past that. */
+const MAX_RETRIES = 4;
+
 export function getTiendaNubeClient(storeId: string, accessToken: string) {
   const client = axios.create({
     baseURL: `${BASE_URL}/${storeId}`,
@@ -11,6 +14,26 @@ export function getTiendaNubeClient(storeId: string, accessToken: string) {
       "User-Agent": "Milester SaaS (gaizka.qwerty@gmail.com)",
     },
   });
+
+  // Back off and retry on rate limiting (and transient 5xx) instead of failing
+  // the product. Honours Retry-After when Tienda Nube sends it.
+  client.interceptors.response.use(undefined, async (error) => {
+    const cfg = error.config as (typeof error.config & { __retry?: number }) | undefined;
+    const status = error.response?.status;
+    const retriable = status === 429 || (status >= 500 && status <= 599);
+    if (!cfg || !retriable) return Promise.reject(error);
+
+    cfg.__retry = (cfg.__retry ?? 0) + 1;
+    if (cfg.__retry > MAX_RETRIES) return Promise.reject(error);
+
+    const retryAfter = Number(error.response?.headers?.["retry-after"]);
+    const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? retryAfter * 1000
+      : Math.min(10_000, 600 * 2 ** (cfg.__retry - 1)); // 600ms, 1.2s, 2.4s, 4.8s
+    await new Promise((r) => setTimeout(r, waitMs));
+    return client(cfg);
+  });
+
   return client;
 }
 
@@ -45,11 +68,12 @@ export async function syncProductToTiendaNube(
     published?: boolean;
     categoryIds?: number[];
     tags?: string;
+    requiresShipping?: boolean | null;
   }
 ) {
   const client = getTiendaNubeClient(storeId, accessToken);
 
-  const payload: TiendaNubeProduct & { published?: boolean; categories?: number[]; tags?: string } = {
+  const payload: TiendaNubeProduct & { published?: boolean; categories?: number[]; tags?: string; requires_shipping?: boolean } = {
     name: { es: product.name },
     description: { es: product.description || "" },
     ...(product.seoTitle && { seo_title: { es: product.seoTitle } }),
@@ -57,6 +81,9 @@ export async function syncProductToTiendaNube(
     ...(product.published !== undefined ? { published: product.published } : {}),
     ...(product.categoryIds !== undefined ? { categories: product.categoryIds } : {}),
     ...(product.tags !== undefined ? { tags: product.tags } : {}),
+    // false = Digital/Servicio. Only sent when known, so we never flip a real
+    // product to "físico" just because we haven't pulled its value yet.
+    ...(product.requiresShipping != null ? { requires_shipping: product.requiresShipping } : {}),
   };
 
   if (product.tiendaNubeId) {
@@ -74,6 +101,8 @@ export async function syncProductToTiendaNube(
             price: String(v.price),
             // TN clears the sale only with an empty string; null is ignored.
             promotional_price: v.promotionalPrice != null ? String(v.promotionalPrice) : "",
+            // Unlimited stock in TN is stock_management:false — sending stock:null alone is not enough.
+            stock_management: v.stock != null,
             stock: v.stock ?? null,
             sku: v.sku ?? null,
           });
@@ -90,6 +119,7 @@ export async function syncProductToTiendaNube(
       variants: product.variants?.map((v) => ({
         price: String(v.price),
         ...(v.promotionalPrice != null ? { promotional_price: String(v.promotionalPrice) } : {}),
+        stock_management: v.stock != null,
         stock: v.stock ?? null,
         sku: v.sku ?? null,
         ...(hasAttrs && v.values && v.values.length ? { values: v.values.map((x) => ({ es: x || "-" })) } : {}),

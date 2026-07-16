@@ -26,6 +26,7 @@ export async function duplicateProduct(sourceId: number, creds?: { storeId: stri
 
   // Variant list from the local mirror by default…
   let attributes = src.attributes;
+  let requiresShipping = src.requiresShipping;
   let variantData = (src.variants.length ? src.variants : [{ price: src.price, promotionalPrice: null, stock: src.stock, values: "[]" }])
     .map((v) => ({ price: v.price, promotionalPrice: v.promotionalPrice ?? null, stock: v.stock ?? null, values: parseArr(v.values) }));
 
@@ -35,6 +36,7 @@ export async function duplicateProduct(sourceId: number, creds?: { storeId: stri
     try {
       const live = await getProductVariants(src.id, creds);
       attributes = JSON.stringify(live.attributes);
+      if (live.requiresShipping != null) requiresShipping = live.requiresShipping;
       variantData = live.variants.map((v) => ({ price: v.price, promotionalPrice: v.promotionalPrice, stock: v.stock, values: v.values }));
     } catch { /* fall back to local */ }
   }
@@ -55,6 +57,7 @@ export async function duplicateProduct(sourceId: number, creds?: { storeId: stri
       stock: src.stock,
       infiniteStock: src.infiniteStock,
       attributes,
+      requiresShipping, // keep the product type (Digital/Servicio) on the copy
       sku: null,
       published: false,
       tags: src.tags,

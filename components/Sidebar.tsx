@@ -100,13 +100,17 @@ export default function Sidebar() {
   const path = usePathname();
   const router = useRouter();
   const [pending, setPending] = useState(0);
+  const [failed, setFailed] = useState(0); // last push errored — needs an explicit retry
   const [pulling, setPulling] = useState(false);
   const [push, setPush] = useState<{ active: boolean; done: number; total: number; errors: number }>({ active: false, done: 0, total: 0, errors: 0 });
   const [lastPull, setLastPull] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
 
   const refreshPending = useCallback(() => {
-    fetch("/api/sync", { method: "POST" }).then((r) => r.json()).then((d) => setPending(d.pending || 0)).catch(() => {});
+    fetch("/api/sync", { method: "POST" })
+      .then((r) => r.json())
+      .then((d) => { setPending(d.pending || 0); setFailed(d.errors || 0); })
+      .catch(() => {});
   }, []);
 
   // INBOUND sync (TN → SaaS): automatic, throttled server-side. Runs on navigation.
@@ -124,27 +128,50 @@ export default function Sidebar() {
   }, [router, refreshPending]);
 
   // OUTBOUND sync (SaaS → TN): push pending local changes. Streamed.
-  const runPush = useCallback(() => {
-    if (push.active || pending === 0) return;
-    setPush({ active: true, done: 0, total: pending, errors: 0 });
-    const es = new EventSource("/api/sync");
-    esRef.current = es;
-    es.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.status === "start") setPush((p) => ({ ...p, total: data.total }));
-      else if (data.status === "progress") setPush((p) => ({ ...p, done: data.done, errors: data.errors }));
-      else if (data.status === "done") {
-        setPush((p) => ({ ...p, done: data.done, errors: data.errors }));
-        es.close();
-        setTimeout(() => { setPush({ active: false, done: 0, total: 0, errors: 0 }); setPending(0); refreshPending(); router.refresh(); }, 1400);
-      } else if (data.status === "error") {
-        es.close();
-        setPush({ active: false, done: 0, total: 0, errors: 0 });
-        refreshPending();
-      }
+  // mode "errors" re-pushes only the products whose last attempt failed —
+  // those drop out of the normal queue, so they need an explicit retry.
+  const runPush = useCallback((mode?: "errors") => {
+    const queued = mode === "errors" ? failed : pending;
+    if (push.active || queued === 0) return;
+
+    // The server pushes a slice per request; chain batches until nothing is left.
+    // Progress is cumulative across batches so the button reads naturally.
+    let carried = 0;
+    let carriedErrors = 0;
+    setPush({ active: true, done: 0, total: queued, errors: 0 });
+
+    const finish = () => {
+      setTimeout(() => { setPush({ active: false, done: 0, total: 0, errors: 0 }); refreshPending(); router.refresh(); }, 1200);
     };
-    es.onerror = () => { es.close(); setPush({ active: false, done: 0, total: 0, errors: 0 }); refreshPending(); };
-  }, [push.active, pending, router, refreshPending]);
+
+    const runBatch = () => {
+      const es = new EventSource(mode === "errors" ? "/api/sync?mode=errors" : "/api/sync");
+      esRef.current = es;
+      es.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        if (data.status === "start") {
+          setPush((p) => ({ ...p, total: carried + (data.queued ?? data.total) }));
+        } else if (data.status === "progress") {
+          setPush((p) => ({ ...p, done: carried + data.done, errors: carriedErrors + data.errors }));
+        } else if (data.status === "done") {
+          es.close();
+          carried += data.done;
+          carriedErrors += data.errors;
+          setPush((p) => ({ ...p, done: carried, errors: carriedErrors }));
+          // Guard against a stuck queue: only continue if this batch moved something.
+          if (data.remaining > 0 && data.done > 0) runBatch();
+          else finish();
+        } else if (data.status === "error") {
+          es.close();
+          setPush({ active: false, done: 0, total: 0, errors: 0 });
+          refreshPending();
+        }
+      };
+      es.onerror = () => { es.close(); setPush({ active: false, done: 0, total: 0, errors: 0 }); refreshPending(); };
+    };
+
+    runBatch();
+  }, [push.active, pending, failed, router, refreshPending]);
 
   // On navigation: refresh the pending count and run the automatic inbound pull.
   useEffect(() => {
@@ -220,7 +247,7 @@ export default function Sidebar() {
       {/* Sync footer: OUTBOUND push (SaaS → TN). Inbound pull runs automatically. */}
       <div style={{ padding: "10px 12px", borderTop: "1px solid var(--color-divider)" }}>
         <button
-          onClick={runPush}
+          onClick={() => runPush()}
           disabled={push.active || pending === 0}
           title={pending === 0 ? "No hay cambios para subir" : "Subir tus cambios a Tienda Nube"}
           style={{
@@ -249,6 +276,26 @@ export default function Sidebar() {
             ? `Subir ${pending} ${pending === 1 ? "cambio" : "cambios"}`
             : "Todo sincronizado"}
         </button>
+
+        {/* Failed pushes leave the normal queue, so they need their own retry. */}
+        {failed > 0 && !push.active && (
+          <button
+            onClick={() => runPush("errors")}
+            title="Volver a intentar los productos cuya última subida falló"
+            style={{
+              width: "100%", marginTop: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+              padding: "8px 11px", borderRadius: "var(--radius-control)",
+              border: "1px solid var(--color-danger)", background: "var(--color-danger-bg)",
+              color: "var(--color-danger)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer",
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 2v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L3 8" />
+            </svg>
+            Reintentar {failed} con error
+          </button>
+        )}
+
         <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", textAlign: "center", marginTop: 6, minHeight: 14 }}>
           {pulling
             ? "Trayendo cambios de Tienda Nube…"
