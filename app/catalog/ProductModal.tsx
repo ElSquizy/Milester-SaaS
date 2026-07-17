@@ -10,6 +10,7 @@ type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: stri
 
 type Product = {
   id: number;
+  tiendaNubeId: string | null;
   name: string;
   description: string | null;
   descriptionTemplateId: number | null;
@@ -258,13 +259,21 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
                     {product.variants.length > 1 ? (
                       <p style={{ fontSize: "0.8125rem", color: "var(--color-subtle)", margin: 0 }}>Este producto tiene variantes — gestioná el stock en la pestaña <strong>Variantes</strong>.</p>
                     ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <button type="button" className="switch" data-on={infiniteStock} onClick={() => setInfiniteStock((v) => !v)} aria-label="Stock ilimitado" />
-                        <span style={{ fontSize: "0.875rem", color: "var(--color-ink)" }}>Stock ilimitado (∞)</span>
-                        {!infiniteStock && (
-                          <input className="input" type="number" min={0} value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" style={{ width: 110, marginLeft: "auto" }} />
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <button type="button" className="switch" data-on={infiniteStock} onClick={() => setInfiniteStock((v) => !v)} aria-label="Stock ilimitado" />
+                          <span style={{ fontSize: "0.875rem", color: "var(--color-ink)" }}>Stock ilimitado (∞)</span>
+                          {!infiniteStock && (
+                            <input className="input" type="number" min={0} value={stock} onChange={(e) => setStock(e.target.value)} placeholder="0" style={{ width: 110, marginLeft: "auto" }} />
+                          )}
+                        </div>
+                        {/* TN only honours unlimited stock at CREATE time; updates are silently ignored. */}
+                        {infiniteStock && !product.infiniteStock && product.tiendaNubeId && (
+                          <p style={{ marginTop: 8, padding: "8px 11px", borderRadius: 8, background: "var(--color-warning-bg)", border: "1px solid var(--color-warning)", fontSize: "0.75rem", color: "var(--color-warning)", lineHeight: 1.5 }}>
+                            ⚠ Tienda Nube solo permite <strong>stock ilimitado al crear</strong> el producto. Para este producto ya publicado, activalo desde el panel de Tienda Nube — acá se guarda solo el valor local.
+                          </p>
                         )}
-                      </div>
+                      </>
                     )}
                   </Field>
                   <Field label="Colecciones" hint={`${catIds.size}`}>

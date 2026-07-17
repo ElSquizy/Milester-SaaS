@@ -13,6 +13,7 @@ import { useFocus } from "./useFocus";
 
 type EditProduct = {
   id: number;
+  tiendaNubeId: string | null;
   name: string;
   description: string | null;
   descriptionTemplateId: number | null;
