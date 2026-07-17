@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { applyItemToProduct, revertItemFromProduct } from "@/lib/campaigns";
+import { applyItemToProduct, revertItemFromProduct, parseVariantPrices } from "@/lib/campaigns";
 
 /** GET: the campaign's product items (editable preview: base price + promo price). */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -66,7 +66,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (campaign.status === "active") {
     const meta = { addTag: campaign.addTag, addCategoryId: campaign.addCategoryId };
     if (Array.isArray(removeIds)) {
-      for (const pid of removeIds.map(Number)) await revertItemFromProduct(meta, pid);
+      for (const pid of removeIds.map(Number)) await revertItemFromProduct(meta, pid, campaignId, false);
     }
     const affected = new Set<number>([
       ...(Array.isArray(addIds) ? addIds.map(Number) : []),
@@ -74,7 +74,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     ]);
     if (affected.size) {
       const items = await prisma.campaignItem.findMany({ where: { campaignId, productId: { in: [...affected] } } });
-      for (const it of items) await applyItemToProduct(meta, it.productId, it.campaignPrice);
+      for (const it of items) await applyItemToProduct(meta, it.productId, it.campaignPrice, parseVariantPrices(it.variantPrices));
     }
   }
 

@@ -32,12 +32,22 @@ export async function POST(req: Request) {
     },
   });
 
-  // Build the editable preview items; use explicit per-product prices if the wizard sent them.
+  // Build the editable preview items; use explicit per-product and per-variant prices from the wizard.
   const ids = Array.isArray(productIds) ? productIds.map(Number) : undefined;
   const priceMap: Record<number, number> | undefined = Array.isArray(items)
     ? Object.fromEntries(items.map((i: { productId: number; promoPrice: number }) => [Number(i.productId), Number(i.promoPrice)]))
     : undefined;
-  await buildCampaignItems(campaign.id, scope === "products" ? ids : undefined, priceMap);
+  const variantMap: Record<number, { variantId: number; campaignPrice: number }[]> | undefined = Array.isArray(items)
+    ? Object.fromEntries(
+        items
+          .filter((i: { variantPrices?: unknown }) => Array.isArray(i.variantPrices) && i.variantPrices.length)
+          .map((i: { productId: number; variantPrices: { variantId: number; campaignPrice: number }[] }) => [
+            Number(i.productId),
+            i.variantPrices.map((v) => ({ variantId: Number(v.variantId), campaignPrice: Number(v.campaignPrice) })),
+          ]),
+      )
+    : undefined;
+  await buildCampaignItems(campaign.id, scope === "products" ? ids : undefined, priceMap, variantMap);
 
   return NextResponse.json(campaign);
 }

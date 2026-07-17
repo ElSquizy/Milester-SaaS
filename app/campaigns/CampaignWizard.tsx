@@ -7,6 +7,7 @@ import {
 import { es } from "date-fns/locale";
 
 type Sel = { id: number; name: string; imageUrl: string | null; price: number };
+type VariantInfo = { id: number; label: string; price: number; promotionalPrice: number | null };
 type Cat = { id: number; tiendaNubeId: string; name: string; parentTnId: string | null; count: number };
 type GridProduct = { id: number; name: string; sku: string | null; price: number; promotionalPrice: number | null; imageUrl: string | null };
 
@@ -46,6 +47,9 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
   const [start, setStart] = useState<Date | null>(null);
   const [end, setEnd] = useState<Date | null>(null);
   const [prices, setPrices] = useState<Map<number, number>>(new Map());
+  // Per-variant campaign prices for multi-variant products: productId -> (variantId -> price).
+  const [variantMeta, setVariantMeta] = useState<Map<number, VariantInfo[]>>(new Map());
+  const [variantPrices, setVariantPrices] = useState<Map<number, Map<number, number>>>(new Map());
   const [bulkPct, setBulkPct] = useState("20");
   const [priceMode, setPriceMode] = useState<"pct" | "fixed">("pct");
   const [fixedValue, setFixedValue] = useState("");
@@ -55,40 +59,73 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
 
   useEffect(() => { fetch("/api/categories").then((r) => r.json()).then(setCats).catch(() => {}); }, []);
 
-  // When entering stage 3, seed prices from a default discount for any product without one.
+  // When entering the price stage, seed a default price for any product without one,
+  // and load which selected products have variants so they can be priced per-variant.
   useEffect(() => {
-    if (stage === 2) {
-      setPrices((prev) => {
-        const next = new Map(prev);
-        selected.forEach((p) => { if (!next.has(p.id)) next.set(p.id, Math.round(p.price * 0.8)); });
-        // Drop prices for de-selected products.
-        [...next.keys()].forEach((id) => { if (!selected.has(id)) next.delete(id); });
-        return next;
-      });
-    }
+    if (stage !== 2) return;
+    setPrices((prev) => {
+      const next = new Map(prev);
+      selected.forEach((p) => { if (!next.has(p.id)) next.set(p.id, Math.round(p.price * 0.8)); });
+      [...next.keys()].forEach((id) => { if (!selected.has(id)) next.delete(id); });
+      return next;
+    });
+    const ids = [...selected.keys()];
+    if (!ids.length) { setVariantMeta(new Map()); return; }
+    fetch("/api/products/variants", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) })
+      .then((r) => r.json())
+      .then((data: Record<string, VariantInfo[]>) => {
+        const meta = new Map<number, VariantInfo[]>();
+        for (const [pid, vs] of Object.entries(data)) if (selected.has(Number(pid))) meta.set(Number(pid), vs);
+        setVariantMeta(meta);
+        // Seed each variant's price (20% off its own base) if not set yet.
+        setVariantPrices((prev) => {
+          const nextVp = new Map(prev);
+          for (const [pid, vs] of meta) {
+            const m = new Map(nextVp.get(pid) ?? []);
+            for (const v of vs) if (!m.has(v.id)) m.set(v.id, Math.round(v.price * 0.8));
+            nextVp.set(pid, m);
+          }
+          for (const pid of [...nextVp.keys()]) if (!meta.has(pid)) nextVp.delete(pid);
+          return nextVp;
+        });
+      })
+      .catch(() => {});
   }, [stage, selected]);
 
   function applyMethod() {
-    setPrices(() => {
-      const next = new Map<number, number>();
-      if (priceMode === "pct") {
-        const pct = parseFloat(bulkPct);
-        if (isNaN(pct)) return next;
-        selected.forEach((p) => next.set(p.id, roundEnding(Math.max(0, p.price * (1 - pct / 100)), rounding)));
-      } else {
-        const fixed = parseFloat(fixedValue.replace(/\./g, "").replace(",", "."));
-        if (isNaN(fixed)) return next;
-        selected.forEach((p) => next.set(p.id, roundEnding(Math.max(0, fixed), rounding)));
-      }
+    const pct = parseFloat(bulkPct);
+    const fixed = parseFloat(fixedValue.replace(/\./g, "").replace(",", "."));
+    const priceFor = (base: number) => priceMode === "pct"
+      ? roundEnding(Math.max(0, base * (1 - pct / 100)), rounding)
+      : roundEnding(Math.max(0, fixed), rounding);
+    if (priceMode === "pct" ? isNaN(pct) : isNaN(fixed)) return;
+
+    setPrices(() => { const next = new Map<number, number>(); selected.forEach((p) => next.set(p.id, priceFor(p.price))); return next; });
+    // Shortcut: the same rule fills every variant from its own base price.
+    setVariantPrices(() => {
+      const next = new Map<number, Map<number, number>>();
+      for (const [pid, vs] of variantMeta) { const m = new Map<number, number>(); vs.forEach((v) => m.set(v.id, priceFor(v.price))); next.set(pid, m); }
       return next;
     });
   }
 
-  // Apply just the price-ending rounding to the current per-product prices.
+  // Apply just the price-ending rounding to the current prices.
   function applyRoundingOnly() {
-    setPrices((prev) => {
-      const next = new Map<number, number>();
-      selected.forEach((p) => { const cur = prev.get(p.id) ?? p.price; next.set(p.id, roundEnding(cur, rounding)); });
+    setPrices((prev) => { const next = new Map<number, number>(); selected.forEach((p) => next.set(p.id, roundEnding(prev.get(p.id) ?? p.price, rounding))); return next; });
+    setVariantPrices((prev) => {
+      const next = new Map<number, Map<number, number>>();
+      for (const [pid, vs] of variantMeta) { const cur = prev.get(pid); const m = new Map<number, number>(); vs.forEach((v) => m.set(v.id, roundEnding(cur?.get(v.id) ?? v.price, rounding))); next.set(pid, m); }
+      return next;
+    });
+  }
+
+  function setVariantPrice(pid: number, vid: number, value: string) {
+    const n = parseFloat(value.replace(/\./g, "").replace(",", "."));
+    setVariantPrices((prev) => {
+      const next = new Map(prev);
+      const m = new Map(next.get(pid) ?? []);
+      m.set(vid, isNaN(n) ? 0 : n);
+      next.set(pid, m);
       return next;
     });
   }
@@ -117,7 +154,16 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
           addTag: tag.trim() || undefined, addCategoryId,
           startDate: start ? start.toISOString() : undefined,
           endDate: end ? end.toISOString() : undefined,
-          items: [...selected.keys()].map((id) => ({ productId: id, promoPrice: prices.get(id) ?? selected.get(id)!.price })),
+          items: [...selected.keys()].map((id) => {
+            const vm = variantMeta.get(id);
+            const vp = variantPrices.get(id);
+            return {
+              productId: id,
+              promoPrice: prices.get(id) ?? selected.get(id)!.price,
+              // Per-variant prices for multi-variant products.
+              ...(vm && vp ? { variantPrices: vm.map((v) => ({ variantId: v.id, campaignPrice: vp.get(v.id) ?? v.price })) } : {}),
+            };
+          }),
         }),
       });
       const d = await res.json();
@@ -161,7 +207,7 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
           )}
           {stage === 1 && <StageSchedule start={start} end={end} setStart={setStart} setEnd={setEnd} />}
           {stage === 2 && (
-            <StagePrices selected={selected} prices={prices} setPrices={setPrices} bulkPct={bulkPct} setBulkPct={setBulkPct} applyMethod={applyMethod} applyRoundingOnly={applyRoundingOnly} priceMode={priceMode} setPriceMode={setPriceMode} fixedValue={fixedValue} setFixedValue={setFixedValue} rounding={rounding} setRounding={setRounding} />
+            <StagePrices selected={selected} prices={prices} setPrices={setPrices} variantMeta={variantMeta} variantPrices={variantPrices} setVariantPrice={setVariantPrice} bulkPct={bulkPct} setBulkPct={setBulkPct} applyMethod={applyMethod} applyRoundingOnly={applyRoundingOnly} priceMode={priceMode} setPriceMode={setPriceMode} fixedValue={fixedValue} setFixedValue={setFixedValue} rounding={rounding} setRounding={setRounding} />
           )}
         </div>
 
@@ -373,8 +419,9 @@ function StageSchedule({ start, end, setStart, setEnd }: { start: Date | null; e
 }
 
 /* ── Stage 3: prices ─────────────────────── */
-function StagePrices({ selected, prices, setPrices, bulkPct, setBulkPct, applyMethod, applyRoundingOnly, priceMode, setPriceMode, fixedValue, setFixedValue, rounding, setRounding }: {
+function StagePrices({ selected, prices, setPrices, variantMeta, variantPrices, setVariantPrice, bulkPct, setBulkPct, applyMethod, applyRoundingOnly, priceMode, setPriceMode, fixedValue, setFixedValue, rounding, setRounding }: {
   selected: Map<number, Sel>; prices: Map<number, number>; setPrices: (fn: (m: Map<number, number>) => Map<number, number>) => void;
+  variantMeta: Map<number, VariantInfo[]>; variantPrices: Map<number, Map<number, number>>; setVariantPrice: (pid: number, vid: number, v: string) => void;
   bulkPct: string; setBulkPct: (v: string) => void; applyMethod: () => void; applyRoundingOnly: () => void;
   priceMode: "pct" | "fixed"; setPriceMode: (m: "pct" | "fixed") => void;
   fixedValue: string; setFixedValue: (v: string) => void;
@@ -422,22 +469,47 @@ function StagePrices({ selected, prices, setPrices, bulkPct, setBulkPct, applyMe
       </div>
       <div className="card" style={{ overflow: "hidden" }}>
         {[...selected.values()].map((p, i) => {
+          const vs = variantMeta.get(p.id);
           const promo = prices.get(p.id) ?? p.price;
           const off = p.price > 0 ? Math.round((1 - promo / p.price) * 100) : 0;
           return (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
-              {p.imageUrl
-                // eslint-disable-next-line @next/next/no-img-element
-                ? <img src={p.imageUrl} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                : <span style={{ width: 36, height: 36, borderRadius: 8, background: "var(--color-surface-2)", flexShrink: 0 }} />}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
-                <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>Base ${p.price.toLocaleString("es-AR")}{off > 0 && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · −{off}%</span>}</div>
+            <div key={p.id} style={{ borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}>
+                {p.imageUrl
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={p.imageUrl} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                  : <span style={{ width: 36, height: 36, borderRadius: 8, background: "var(--color-surface-2)", flexShrink: 0 }} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>
+                    {vs ? `${vs.length} variantes` : <>Base ${p.price.toLocaleString("es-AR")}{off > 0 && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · −{off}%</span>}</>}
+                  </div>
+                </div>
+                {!vs && (
+                  <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
+                    <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
+                    <input className="input" value={promo} onChange={(e) => setP(p.id, e.target.value)} style={{ paddingLeft: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums", padding: "8px 10px 8px 20px" }} />
+                  </div>
+                )}
               </div>
-              <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
-                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
-                <input className="input" value={promo} onChange={(e) => setP(p.id, e.target.value)} style={{ paddingLeft: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums", padding: "8px 10px 8px 20px" }} />
-              </div>
+
+              {/* Per-variant prices */}
+              {vs && vs.map((v) => {
+                const vp = variantPrices.get(p.id)?.get(v.id) ?? v.price;
+                const voff = v.price > 0 ? Math.round((1 - vp / v.price) * 100) : 0;
+                return (
+                  <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px 7px 46px", background: "var(--color-surface-2)" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.8125rem", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label || "Variante"}</div>
+                      <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>Base ${v.price.toLocaleString("es-AR")}{voff > 0 && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · −{voff}%</span>}</div>
+                    </div>
+                    <div style={{ position: "relative", width: 120, flexShrink: 0 }}>
+                      <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
+                      <input className="input" value={vp} onChange={(e) => setVariantPrice(p.id, v.id, e.target.value)} style={{ paddingLeft: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums", padding: "7px 10px 7px 20px" }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}

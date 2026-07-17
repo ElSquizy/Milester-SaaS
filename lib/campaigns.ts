@@ -33,48 +33,108 @@ function removeTag(json: string, tag: string): string {
 
 type CampaignMeta = { addTag: string | null; addCategoryId: number | null };
 
+export type VariantPrice = { variantId: number; campaignPrice: number };
+export function parseVariantPrices(json: string): VariantPrice[] {
+  try { const a = JSON.parse(json); return Array.isArray(a) ? a.filter((v) => typeof v?.variantId === "number") : []; } catch { return []; }
+}
+
 /**
- * Applies one campaign item to its live product: sets the promotional price (only if below
- * base), adds the campaign tag/category, marks it modified. Used both by applyCampaign and
- * by editing an ACTIVE campaign so changes reflect immediately.
+ * Sets a campaign's promo on a product AND its variants. For multi-variant
+ * products each variant gets its own price (variantPrices); the product-level
+ * promotionalPrice mirrors the lowest-id variant, which is the one the outbound
+ * sync makes follow the product. Single-variant products keep the simple path.
+ * Promo is only applied when it's actually below the base price.
  */
-export async function applyItemToProduct(campaign: CampaignMeta, productId: number, campaignPrice: number) {
-  const product = await prisma.product.findUnique({ where: { id: productId }, select: { price: true, tags: true, promotionalPrice: true } });
+async function applyPromo(meta: CampaignMeta, productId: number, campaignPrice: number, variantPrices: VariantPrice[]) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { price: true, tags: true, promotionalPrice: true, variants: { orderBy: { id: "asc" }, select: { id: true, price: true } } },
+  });
   if (!product) return;
-  const promo = campaignPrice < product.price ? campaignPrice : product.price;
+
+  let productPromo: number;
+  if (variantPrices.length && product.variants.length > 1) {
+    const vp = new Map(variantPrices.map((v) => [v.variantId, v.campaignPrice]));
+    for (const v of product.variants) {
+      const cp = vp.get(v.id) ?? campaignPrice;
+      await prisma.variant.update({ where: { id: v.id }, data: { promotionalPrice: cp < v.price ? cp : v.price } });
+    }
+    const first = product.variants[0];
+    const cp0 = vp.get(first.id) ?? campaignPrice;
+    productPromo = cp0 < first.price ? cp0 : first.price;
+  } else {
+    productPromo = campaignPrice < product.price ? campaignPrice : product.price;
+  }
+
   await prisma.$transaction([
     prisma.product.update({
       where: { id: productId },
-      data: { promotionalPrice: promo, syncStatus: "modified", ...(campaign.addTag ? { tags: addTag(product.tags, campaign.addTag) } : {}) },
+      data: { promotionalPrice: productPromo, syncStatus: "modified", ...(meta.addTag ? { tags: addTag(product.tags, meta.addTag) } : {}) },
     }),
     prisma.changelog.create({
-      data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: String(promo) },
+      data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: String(productPromo) },
     }),
   ]);
-  if (campaign.addCategoryId) {
+  if (meta.addCategoryId) {
     await prisma.productCategory.upsert({
-      where: { productId_categoryId: { productId, categoryId: campaign.addCategoryId } },
-      update: {}, create: { productId, categoryId: campaign.addCategoryId },
+      where: { productId_categoryId: { productId, categoryId: meta.addCategoryId } },
+      update: {}, create: { productId, categoryId: meta.addCategoryId },
     });
   }
 }
 
-/** Reverts one campaign item from its live product: clears the promo, removes tag/category. */
-export async function revertItemFromProduct(campaign: CampaignMeta, productId: number) {
-  const product = await prisma.product.findUnique({ where: { id: productId }, select: { tags: true, promotionalPrice: true } });
+/**
+ * Clears a campaign's promo from a product AND its variants, unless another
+ * still-active campaign covers it — then the price is handed over so an
+ * overlapping campaign's discount isn't wiped.
+ */
+async function clearPromo(meta: CampaignMeta, productId: number, campaignId: number, hadVariants: boolean) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { tags: true, promotionalPrice: true, variants: { orderBy: { id: "asc" }, select: { id: true, price: true } } },
+  });
   if (!product) return;
+
+  const takeover = await prisma.campaignItem.findFirst({
+    where: { productId, campaignId: { not: campaignId }, campaign: { status: "active" } },
+    select: { campaignPrice: true, variantPrices: true },
+    orderBy: { id: "desc" },
+  });
+
+  if (hadVariants && product.variants.length > 1) {
+    const overVP = takeover ? new Map(parseVariantPrices(takeover.variantPrices).map((v) => [v.variantId, v.campaignPrice])) : null;
+    for (const v of product.variants) {
+      const cp = overVP?.get(v.id) ?? (takeover ? takeover.campaignPrice : null);
+      await prisma.variant.update({ where: { id: v.id }, data: { promotionalPrice: cp != null ? (cp < v.price ? cp : v.price) : null } });
+    }
+  }
+
+  const productPromo = takeover ? takeover.campaignPrice : null;
   await prisma.$transaction([
     prisma.product.update({
       where: { id: productId },
-      data: { promotionalPrice: null, syncStatus: "modified", ...(campaign.addTag ? { tags: removeTag(product.tags, campaign.addTag) } : {}) },
+      data: { promotionalPrice: productPromo, syncStatus: "modified", ...(meta.addTag ? { tags: removeTag(product.tags, meta.addTag) } : {}) },
     }),
     prisma.changelog.create({
-      data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: null },
+      data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: productPromo == null ? null : String(productPromo) },
     }),
   ]);
-  if (campaign.addCategoryId) {
-    await prisma.productCategory.deleteMany({ where: { productId, categoryId: campaign.addCategoryId } });
+  if (meta.addCategoryId) {
+    await prisma.productCategory.deleteMany({ where: { productId, categoryId: meta.addCategoryId } });
   }
+}
+
+/**
+ * Applies one campaign item to its live product (product + variants). Used both
+ * by applyCampaign and by editing an ACTIVE campaign so changes reflect at once.
+ */
+export async function applyItemToProduct(campaign: CampaignMeta, productId: number, campaignPrice: number, variantPrices: VariantPrice[] = []) {
+  await applyPromo(campaign, productId, campaignPrice, variantPrices);
+}
+
+/** Reverts one campaign item from its live product: clears the promo, removes tag/category. */
+export async function revertItemFromProduct(campaign: CampaignMeta, productId: number, campaignId = -1, hadVariants = false) {
+  await clearPromo(campaign, productId, campaignId, hadVariants);
 }
 
 /** Simulates a campaign without changing anything. Returns impact figures. */
@@ -121,6 +181,7 @@ export async function buildCampaignItems(
   campaignId: number,
   productIds?: number[],
   explicitPrices?: Record<number, number>,
+  variantPrices?: Record<number, VariantPrice[]>,
 ) {
   const c = await prisma.campaign.findUnique({ where: { id: campaignId } });
   if (!c) throw new Error("Campaña no encontrada");
@@ -131,13 +192,16 @@ export async function buildCampaignItems(
 
   await prisma.campaignItem.deleteMany({ where: { campaignId } });
   for (const p of products) {
-    // Prefer the per-product price the user set in the wizard; else default from the discount.
+    const vps = (variantPrices?.[p.id] || []).filter((v) => typeof v?.variantId === "number" && !isNaN(v.campaignPrice));
+    // Product-level promo: the wizard's per-product price, else the first variant's, else the discount default.
     const explicit = explicitPrices?.[p.id];
     const promo = explicit != null && !isNaN(explicit)
       ? Math.max(0, Math.round(explicit * 100) / 100)
-      : discountedPrice(p.price, c.discountType as DiscountType, c.discountValue);
+      : vps.length
+        ? Math.max(0, Math.round(vps[0].campaignPrice * 100) / 100)
+        : discountedPrice(p.price, c.discountType as DiscountType, c.discountValue);
     await prisma.campaignItem.create({
-      data: { campaignId, productId: p.id, originalPrice: p.price, campaignPrice: promo },
+      data: { campaignId, productId: p.id, originalPrice: p.price, campaignPrice: promo, variantPrices: JSON.stringify(vps) },
     });
   }
   return { count: products.length };
@@ -159,29 +223,7 @@ export async function applyCampaign(campaignId: number) {
 
   const now = new Date();
   for (const item of c.items) {
-    // Only apply when the promo price is actually below the base price.
-    const promo = item.campaignPrice < item.product.price ? item.campaignPrice : item.product.price;
-    await prisma.$transaction([
-      prisma.product.update({
-        where: { id: item.productId },
-        data: {
-          promotionalPrice: promo,
-          syncStatus: "modified",
-          ...(c.addTag ? { tags: addTag(item.product.tags, c.addTag) } : {}),
-        },
-      }),
-      prisma.changelog.create({
-        data: { productId: item.productId, field: "promotionalPrice", oldValue: null, newValue: String(promo) },
-      }),
-    ]);
-    // Add the campaign's category to the product (if any), avoiding duplicates.
-    if (c.addCategoryId) {
-      await prisma.productCategory.upsert({
-        where: { productId_categoryId: { productId: item.productId, categoryId: c.addCategoryId } },
-        update: {},
-        create: { productId: item.productId, categoryId: c.addCategoryId },
-      });
-    }
+    await applyPromo(c, item.productId, item.campaignPrice, parseVariantPrices(item.variantPrices));
   }
 
   await prisma.campaign.update({ where: { id: campaignId }, data: { status: "active", appliedAt: now } });
@@ -190,40 +232,11 @@ export async function applyCampaign(campaignId: number) {
 
 /** Ends a campaign: clears the promotional price (base is untouched), removes the tag. */
 export async function endCampaign(campaignId: number) {
-  const c = await prisma.campaign.findUnique({
-    where: { id: campaignId },
-    include: { items: { include: { product: { select: { tags: true, promotionalPrice: true } } } } },
-  });
+  const c = await prisma.campaign.findUnique({ where: { id: campaignId }, include: { items: true } });
   if (!c) throw new Error("Campaña no encontrada");
 
   for (const item of c.items) {
-    // Another campaign may still be running on this product (e.g. one ends the
-    // moment the next starts). Hand the price over to it instead of clearing —
-    // otherwise the incoming campaign's discount gets wiped.
-    const takeover = await prisma.campaignItem.findFirst({
-      where: { productId: item.productId, campaignId: { not: campaignId }, campaign: { status: "active" } },
-      select: { campaignPrice: true },
-      orderBy: { id: "desc" },
-    });
-    const nextPromo = takeover ? takeover.campaignPrice : null;
-
-    await prisma.$transaction([
-      prisma.product.update({
-        where: { id: item.productId },
-        data: {
-          promotionalPrice: nextPromo,
-          syncStatus: "modified",
-          ...(c.addTag ? { tags: removeTag(item.product.tags, c.addTag) } : {}),
-        },
-      }),
-      prisma.changelog.create({
-        data: { productId: item.productId, field: "promotionalPrice", oldValue: String(item.campaignPrice), newValue: nextPromo == null ? null : String(nextPromo) },
-      }),
-    ]);
-    // Remove the campaign's category from the product (products leave the collection).
-    if (c.addCategoryId) {
-      await prisma.productCategory.deleteMany({ where: { productId: item.productId, categoryId: c.addCategoryId } });
-    }
+    await clearPromo(c, item.productId, campaignId, parseVariantPrices(item.variantPrices).length > 0);
   }
 
   // Keep CampaignItems after ending: they're the historical snapshot analytics need.
