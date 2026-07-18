@@ -1,5 +1,6 @@
 "use client";
 import { renderTemplate, parseFields, emptyData, type TemplateField, type TemplateData } from "@/lib/descriptionTemplates";
+import { useIsMobile } from "@/components/useIsMobile";
 
 export type Tmpl = { id: number; name: string; skeleton: string; fields: string };
 
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export default function DescriptionEditor({ templates, mode, setMode, html, setHtml, templateId, setTemplateId, data, setData, productName }: Props) {
+  const isMobile = useIsMobile();
   const tmpl = templates.find((t) => t.id === templateId) || null;
   const fields = tmpl ? parseFields(tmpl.fields) : [];
   const previewHtml = tmpl ? renderTemplate(tmpl.skeleton, data) : "";
@@ -77,7 +79,7 @@ export default function DescriptionEditor({ templates, mode, setMode, html, setH
       ) : !tmpl ? (
         <div style={{ padding: "14px", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Elegí una plantilla para completar sus campos.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
           {/* Slots */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
             {fields.map((f) => <SlotField key={f.key} field={f} data={data} setScalar={setScalar} setListItem={setListItem} addRow={addRow} removeRow={removeRow} />)}

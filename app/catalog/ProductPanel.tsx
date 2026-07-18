@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import CollectionPicker from "./CollectionPicker";
 import { isInFocus, toggleFocus } from "./useFocus";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type Variant = { id: number; price: number; stock: number | null; sku: string | null };
 
@@ -42,6 +43,7 @@ interface Props {
 const fmt = (n: number) => `$${n.toLocaleString("es-AR")}`;
 
 export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: Props) {
+  const isMobile = useIsMobile();
   const originalTags: string[] = (() => { try { return JSON.parse(product.tags); } catch { return []; } })();
 
   const [name, setName] = useState(product.name);
@@ -159,15 +161,17 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
     <>
       {/* Backdrop */}
       <div onClick={onClose} className="anim-in"
-        style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.16)", zIndex: 40 }} />
+        style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.16)", zIndex: isMobile ? 400 : 40 }} />
 
-      {/* Floating panel */}
-      <div className="anim-panel" style={{
-        position: "fixed", top: 14, right: 14, bottom: 14,
-        width: 420, maxWidth: "calc(100vw - 28px)",
-        background: "var(--color-surface)", border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-card)", display: "flex", flexDirection: "column",
-        zIndex: 50, boxShadow: "var(--shadow-float)", overflow: "hidden",
+      {/* Floating panel — full-screen on mobile (above the app top bar), floating card on desktop */}
+      <div className={isMobile ? "anim-in" : "anim-panel"} style={{
+        position: "fixed",
+        ...(isMobile
+          ? { inset: 0, width: "100%", maxWidth: "none", borderRadius: 0, zIndex: 410 }
+          : { top: 14, right: 14, bottom: 14, width: 420, maxWidth: "calc(100vw - 28px)", borderRadius: "var(--radius-card)", zIndex: 50, border: "1px solid var(--color-border)" }),
+        background: "var(--color-surface)",
+        display: "flex", flexDirection: "column",
+        boxShadow: "var(--shadow-float)", overflow: "hidden",
       }}>
         {/* Header: the product itself, not a generic title */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0, gap: 10 }}>

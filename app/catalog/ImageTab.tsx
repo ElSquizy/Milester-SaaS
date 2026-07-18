@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ImageComposer from "./ImageComposer";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number };
 
@@ -23,6 +24,7 @@ export default function ImageTab({
   fallbackImageUrl: string;
 }) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const sel = imageTemplates.find((t) => t.id === imgTmplId) || null;
   const layer = productImageUrl || fallbackImageUrl;
 
@@ -72,7 +74,7 @@ export default function ImageTab({
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28, alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 18 : 28, alignItems: "start" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
         <div>
           <label style={lbl}>Plantilla de imagen</label>

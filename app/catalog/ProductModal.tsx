@@ -5,6 +5,7 @@ import VariantsManager from "./VariantsManager";
 import DescriptionEditor, { type Tmpl } from "./DescriptionEditor";
 import ImageTab from "./ImageTab";
 import type { TemplateData } from "@/lib/descriptionTemplates";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number };
 
@@ -42,6 +43,7 @@ interface Props {
 }
 
 export default function ProductModal({ product, tab, setTab, navIndex, navTotal, onNavigate, onClose, onSaved }: Props) {
+  const isMobile = useIsMobile();
   const [name, setName] = useState(product.name);
   const [sku, setSku] = useState(product.sku || "");
   const [description, setDescription] = useState(product.description || "");
@@ -172,33 +174,34 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
         onClick={() => requestClose(onClose)}
         className="anim-in"
         style={{
-          position: "fixed", inset: 0, zIndex: 60,
+          position: "fixed", inset: 0, zIndex: isMobile ? 400 : 60,
           background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
           display: "flex", alignItems: "flex-start", justifyContent: "center",
-          padding: "56px 24px", overflowY: "auto",
+          padding: isMobile ? 0 : "56px 24px", overflowY: "auto",
         }}
       >
-        {/* Dialog */}
+        {/* Dialog — full-screen on mobile (above the app top bar), centered card on desktop */}
         <div
           onClick={(e) => e.stopPropagation()}
           className="anim-modal"
           style={{
-            width: "100%", maxWidth: 940,
+            width: "100%", maxWidth: isMobile ? "none" : 940,
             background: "var(--color-surface)",
-            borderRadius: "var(--radius-modal)",
+            borderRadius: isMobile ? 0 : "var(--radius-modal)",
             boxShadow: "var(--shadow-float)",
             display: "flex", flexDirection: "column",
-            maxHeight: "calc(100dvh - 112px)",
+            maxHeight: isMobile ? "100dvh" : "calc(100dvh - 112px)",
+            minHeight: isMobile ? "100dvh" : undefined,
           }}
         >
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22px 28px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => requestClose(onClose)} title="Volver al panel" style={{ width: 32, height: 32, borderRadius: 9, border: "1px solid var(--color-border)", background: "var(--color-surface)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-muted)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "14px 16px" : "22px 28px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+              <button onClick={() => requestClose(onClose)} title="Volver al panel" style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 9, border: "1px solid var(--color-border)", background: "var(--color-surface)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-muted)" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
               </button>
-              <div>
-                <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 420 }}>{product.name}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: isMobile ? "1rem" : "1.125rem", fontWeight: 600, letterSpacing: "-0.02em", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: isMobile ? "100%" : 420 }}>{product.name}</div>
                 <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>ID {product.id}{product.sku && ` · ${product.sku}`}</div>
               </div>
             </div>
@@ -225,7 +228,7 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
           </div>
 
           {/* Tab bar */}
-          <div style={{ display: "flex", gap: 2, padding: "0 20px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 2, padding: isMobile ? "0 10px" : "0 20px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0, overflowX: "auto", scrollbarWidth: "none" }}>
             {([
               ["general", "General"],
               ["descripcion", "Descripción"],
@@ -237,6 +240,7 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
                 position: "relative", padding: "13px 14px", border: "none", background: "transparent", cursor: "pointer",
                 fontSize: "0.875rem", fontWeight: tab === v ? 600 : 500,
                 color: tab === v ? "var(--color-brand)" : "var(--color-muted)",
+                flexShrink: 0, whiteSpace: "nowrap",
               }}>
                 {label}
                 {tab === v && <span style={{ position: "absolute", left: 8, right: 8, bottom: -1, height: 2, background: "var(--color-brand)", borderRadius: 2 }} />}
@@ -245,9 +249,9 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
           </div>
 
           {/* Body */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "18px 16px" : "24px 28px" }}>
             {tab === "general" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 32 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 320px", gap: isMobile ? 18 : 32 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
                   <Field label="Nombre">
                     <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
