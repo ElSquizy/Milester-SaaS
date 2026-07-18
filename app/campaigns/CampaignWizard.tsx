@@ -5,6 +5,7 @@ import {
   addMonths, format, isSameDay, isSameMonth, isWithinInterval, isBefore,
 } from "date-fns";
 import { es } from "date-fns/locale";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type Sel = { id: number; name: string; imageUrl: string | null; price: number };
 type VariantInfo = { id: number; label: string; price: number; promotionalPrice: number | null };
@@ -34,6 +35,7 @@ const ROUNDING_OPTS: { v: Rounding; label: string }[] = [
 ];
 
 export default function CampaignWizard({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const isMobile = useIsMobile();
   const [stage, setStage] = useState(0);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Map<number, Sel>>(new Map());
@@ -175,27 +177,30 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
   }
 
   return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 24px" }}>
-      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 860, height: "calc(100dvh - 80px)", background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: isMobile ? 400 : 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? 0 : "40px 24px" }}>
+      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: isMobile ? "none" : 860, height: isMobile ? "100dvh" : "calc(100dvh - 80px)", background: "var(--color-surface)", borderRadius: isMobile ? 0 : "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Header + stepper */}
-        <div style={{ padding: "20px 28px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
+        <div style={{ padding: isMobile ? "16px 16px" : "20px 28px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em" }}>Nueva campaña</div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {STAGES.map((s, i) => (
-              <div key={s} style={{ flex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+              <div key={s} style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <span style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 700, background: i <= stage ? "var(--color-brand)" : "var(--color-surface-2)", color: i <= stage ? "#fff" : "var(--color-subtle)" }}>{i + 1}</span>
-                <span style={{ fontSize: "0.8125rem", fontWeight: i === stage ? 600 : 400, color: i === stage ? "var(--color-ink)" : "var(--color-subtle)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s}</span>
+                {/* On mobile only the active stage shows its label (keeps the stepper from overflowing). */}
+                {(!isMobile || i === stage) && (
+                  <span style={{ fontSize: "0.8125rem", fontWeight: i === stage ? 600 : 400, color: i === stage ? "var(--color-ink)" : "var(--color-subtle)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s}</span>
+                )}
               </div>
             ))}
           </div>
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "18px 16px" : "24px 28px" }}>
           {stage === 0 && (
             <StageIdentity
               name={name} setName={setName} selected={selected} setSelected={setSelected}
@@ -212,7 +217,7 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "16px 28px", borderTop: "1px solid var(--color-divider)", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ padding: isMobile ? "12px 16px" : "16px 28px", borderTop: "1px solid var(--color-divider)", flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
           {error && <span style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-danger)" }}>{error}</span>}
           {!error && <span style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-subtle)" }}>{selected.size} productos seleccionados</span>}
           {stage > 0 && <button className="btn-secondary" onClick={() => setStage(stage - 1)}>Atrás</button>}

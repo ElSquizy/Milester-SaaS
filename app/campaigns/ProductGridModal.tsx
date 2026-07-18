@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { PickedProduct } from "./CampaignExtras";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type GridProduct = { id: number; name: string; sku: string | null; price: number; promotionalPrice: number | null; imageUrl: string | null; categoryName: string | null };
 
@@ -17,6 +18,7 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
   confirmLabel?: string;
   title?: string;
 }) {
+  const isMobile = useIsMobile();
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [products, setProducts] = useState<GridProduct[]>([]);
@@ -59,17 +61,17 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
       onClick={onClose}
       className="anim-in"
       style={{
-        position: "fixed", inset: 0, zIndex: 60,
+        position: "fixed", inset: 0, zIndex: isMobile ? 420 : 60,
         background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
-        display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 24px",
+        display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? 0 : "40px 24px",
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className="anim-modal"
         style={{
-          width: "100%", maxWidth: 900, height: "calc(100dvh - 80px)",
-          background: "var(--color-surface)", borderRadius: "var(--radius-modal)",
+          width: "100%", maxWidth: isMobile ? "none" : 900, height: isMobile ? "100dvh" : "calc(100dvh - 80px)",
+          background: "var(--color-surface)", borderRadius: isMobile ? 0 : "var(--radius-modal)",
           boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden",
         }}
       >

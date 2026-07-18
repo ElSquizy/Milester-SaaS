@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import ProductGridModal from "./ProductGridModal";
+import { useIsMobile } from "@/components/useIsMobile";
 
 export type PickedProduct = { id: number; name: string; imageUrl: string | null; price: number };
 type SearchResult = { id: number; name: string; sku: string | null; price: number; imageUrl: string | null; categoryName: string | null };
@@ -69,6 +70,7 @@ type VariantInfo = { id: number; label: string; price: number; promotionalPrice:
 export function ItemsPanel({ campaignId, status, categories, onClose, onApplied }: {
   campaignId: number; status: string; categories: string[]; onClose: () => void; onApplied: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<Item[]>([]);
   const [originalIds, setOriginalIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(true);
@@ -186,12 +188,14 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
 
   return (
     <>
-      <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.16)", zIndex: 40 }} />
-      <div className="anim-panel" style={{
-        position: "fixed", top: 14, right: 14, bottom: 14, width: 480, maxWidth: "calc(100vw - 28px)",
-        background: "var(--color-surface)", border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-float)",
-        display: "flex", flexDirection: "column", zIndex: 50, overflow: "hidden",
+      <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.16)", zIndex: isMobile ? 400 : 40 }} />
+      <div className={isMobile ? "anim-in" : "anim-panel"} style={{
+        position: "fixed",
+        ...(isMobile
+          ? { inset: 0, width: "100%", maxWidth: "none", borderRadius: 0, zIndex: 410 }
+          : { top: 14, right: 14, bottom: 14, width: 480, maxWidth: "calc(100vw - 28px)", borderRadius: "var(--radius-card)", zIndex: 50, border: "1px solid var(--color-border)" }),
+        background: "var(--color-surface)", boxShadow: "var(--shadow-float)",
+        display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
           <div>

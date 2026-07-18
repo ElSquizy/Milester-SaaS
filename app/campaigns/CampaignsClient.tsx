@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Campaign } from "./page";
 import { ItemsPanel } from "./CampaignExtras";
 import CampaignWizard from "./CampaignWizard";
+import { useIsMobile } from "@/components/useIsMobile";
 
 interface Props {
   campaigns: Campaign[];
@@ -23,26 +24,27 @@ const fmtDate = (d: string | null) =>
 
 export default function CampaignsClient({ campaigns, categories, pendingCount }: Props) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [analyticsFor, setAnalyticsFor] = useState<Campaign | null>(null);
   const [itemsFor, setItemsFor] = useState<number | null>(null);
 
   return (
-    <div style={{ height: "100dvh", overflowY: "auto", padding: "48px 48px 80px" }}>
+    <div style={{ height: "100dvh", overflowY: "auto", padding: isMobile ? "24px 16px 80px" : "48px 48px 80px" }}>
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
 
         {/* Header */}
-        <div className="anim-up" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 32 }}>
+        <div className="anim-up" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "flex-end", justifyContent: "space-between", gap: isMobile ? 16 : 0, marginBottom: isMobile ? 24 : 32 }}>
           <div>
-            <h1 style={{ fontSize: "1.75rem", fontWeight: 600, letterSpacing: "-0.02em", margin: "0 0 4px", lineHeight: 1.1 }}>
+            <h1 style={{ fontSize: isMobile ? "1.5rem" : "1.75rem", fontWeight: 600, letterSpacing: "-0.02em", margin: "0 0 4px", lineHeight: 1.1 }}>
               Campañas
             </h1>
             <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
               Descuentos programados que se activan y terminan solos.
             </p>
           </div>
-          <button className="btn-primary" onClick={() => setCreating(true)} style={{ whiteSpace: "nowrap" }}>
+          <button className="btn-primary" onClick={() => setCreating(true)} style={{ whiteSpace: "nowrap", justifyContent: "center" }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             Nueva campaña
           </button>
@@ -84,6 +86,7 @@ export default function CampaignsClient({ campaigns, categories, pendingCount }:
                 key={c.id}
                 campaign={c}
                 busy={busyId === c.id}
+                isMobile={isMobile}
                 onAnalytics={() => setAnalyticsFor(c)}
                 onReview={() => setItemsFor(c.id)}
                 onAction={async (action) => {
@@ -135,8 +138,8 @@ export default function CampaignsClient({ campaigns, categories, pendingCount }:
   );
 }
 
-function CampaignRow({ campaign: c, busy, onAction, onAnalytics, onReview }: {
-  campaign: Campaign; busy: boolean;
+function CampaignRow({ campaign: c, busy, isMobile, onAction, onAnalytics, onReview }: {
+  campaign: Campaign; busy: boolean; isMobile: boolean;
   onAction: (a: "apply" | "end" | "delete") => void;
   onAnalytics: () => void;
   onReview: () => void;
@@ -151,13 +154,15 @@ function CampaignRow({ campaign: c, busy, onAction, onAnalytics, onReview }: {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: "flex", alignItems: "center", gap: 16,
-        padding: "20px 22px",
+        display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 14 : 16,
+        padding: isMobile ? "16px 16px" : "20px 22px",
         background: "var(--color-surface)", border: "1px solid var(--color-border)",
         borderRadius: "var(--radius-card)",
         boxShadow: hover ? "var(--shadow-float)" : "var(--shadow-card)",
         transition: "box-shadow 0.16s",
       }}>
+      {/* Badge + info group */}
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1, minWidth: 0 }}>
       <div style={{
         width: 48, height: 48, borderRadius: 14, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -190,8 +195,9 @@ function CampaignRow({ campaign: c, busy, onAction, onAnalytics, onReview }: {
           {c.addTag && ` · etiqueta "${c.addTag}"`}
         </div>
       </div>
+      </div>
 
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 8, flexShrink: 0, ...(isMobile ? { flexWrap: "wrap" } : {}) }}>
         {(c.status === "active" || c.status === "ended") && (
           <button className="btn-secondary" onClick={onAnalytics} style={{ padding: "7px 14px", fontSize: "0.8125rem" }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" /></svg>
@@ -234,6 +240,7 @@ function CampaignRow({ campaign: c, busy, onAction, onAnalytics, onReview }: {
 }
 
 function AnalyticsPanel({ campaign, onClose }: { campaign: Campaign; onClose: () => void }) {
+  const isMobile = useIsMobile();
   const [data, setData] = useState<Analytics>(null);
   const [error, setError] = useState("");
 
@@ -249,13 +256,14 @@ function AnalyticsPanel({ campaign, onClose }: { campaign: Campaign; onClose: ()
 
   return (
     <>
-      <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.16)", zIndex: 40 }} />
-      <div className="anim-panel" style={{
-        position: "fixed", top: 14, right: 14, bottom: 14,
-        width: 440, maxWidth: "calc(100vw - 28px)",
-        background: "var(--color-surface)", border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-float)",
-        display: "flex", flexDirection: "column", zIndex: 50, overflow: "hidden",
+      <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.16)", zIndex: isMobile ? 400 : 40 }} />
+      <div className={isMobile ? "anim-in" : "anim-panel"} style={{
+        position: "fixed",
+        ...(isMobile
+          ? { inset: 0, width: "100%", maxWidth: "none", borderRadius: 0, zIndex: 410 }
+          : { top: 14, right: 14, bottom: 14, width: 440, maxWidth: "calc(100vw - 28px)", borderRadius: "var(--radius-card)", zIndex: 50, border: "1px solid var(--color-border)" }),
+        background: "var(--color-surface)", boxShadow: "var(--shadow-float)",
+        display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
           <div>
