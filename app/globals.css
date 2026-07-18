@@ -15,24 +15,28 @@
   --color-surface:     #FFFFFF;
   --color-surface-2:   #F3F4F6;   /* input / header tint */
 
-  /* Ink */
-  --color-ink:         #111827;   /* near-black, soft */
-  --color-muted:       #6B7280;   /* secondary text */
-  --color-subtle:      #9CA3AF;   /* tertiary text */
-  --color-faint:       #D1D5DB;   /* placeholders, icons */
+  /* Ink — every step that carries TEXT clears 4.5:1 on --color-surface.
+     --color-faint is the only sub-AA step and is for non-text only
+     (icon strokes, scrollbar, decorative rules). Never use it for words. */
+  --color-ink:         #111827;   /* near-black, soft — 17.7:1 */
+  --color-muted:       #4B5563;   /* secondary text — 7.6:1 */
+  --color-subtle:      #6B7280;   /* tertiary text, placeholders — 4.8:1 */
+  --color-faint:       #9CA3AF;   /* NON-TEXT only: icons, rules — 2.5:1 */
 
   /* Borders */
   --color-border:      #E5E7EB;
   --color-divider:     #F3F4F6;
 
-  /* Semantic */
-  --color-success:     #10B981;
+  /* Semantic — the base token is the TEXT/border/icon tone: it clears 4.5:1 both
+     on --color-surface and on its own -bg, and carries white text when used as a
+     filled badge. The -bg tones are unchanged. */
+  --color-success:     #047857;
   --color-success-bg:  #ECFDF5;
-  --color-warning:     #F59E0B;
+  --color-warning:     #B45309;
   --color-warning-bg:  #FFFBEB;
-  --color-danger:      #EF4444;
+  --color-danger:      #B91C1C;
   --color-danger-bg:   #FEF2F2;
-  --color-info:        #3B82F6;
+  --color-info:        #1D4ED8;
   --color-info-bg:     #EFF6FF;
 
   /* Radii */
@@ -83,9 +87,15 @@ body {
   min-height: 100dvh;
 }
 
-/* ── Focus ───────────────────────────────────── */
+/* ── Focus ───────────────────────────────────────
+   The inline-editable fields across the catalog set `outline: none` as an inline
+   style (they draw their own border on focus), and an inline style beats a plain
+   stylesheet rule — which left keyboard users with no visible focus at all on the
+   app's primary editing surface. `!important` is deliberate here: it is the only
+   way to win against inline styles, and it makes the indicator impossible to
+   regress from a component. WCAG 2.4.7. */
 :focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--color-brand) !important;
   outline-offset: 2px;
   border-radius: 6px;
 }

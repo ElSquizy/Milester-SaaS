@@ -13,11 +13,33 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
   const ref = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Keyboard support: the menu is a real menu (roving focus with arrows, Home/End,
+  // Escape to dismiss). Without this it was reachable by right-click only, which
+  // left keyboard and touch users with no path to these actions at all.
+  const items = () =>
+    Array.from(ref.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not([disabled])') ?? []);
+
+  useEffect(() => {
+    // Move focus into the menu so arrow keys work and focus can't stay behind it.
+    items()[0]?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     function onDoc(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     }
-    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      const list = items();
+      if (list.length === 0) return;
+      const i = list.indexOf(document.activeElement as HTMLButtonElement);
+      if (e.key === "ArrowDown") { e.preventDefault(); list[(i + 1 + list.length) % list.length].focus(); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+      else if (e.key === "Home") { e.preventDefault(); list[0].focus(); }
+      else if (e.key === "End") { e.preventDefault(); list[list.length - 1].focus(); }
+      else if (e.key === "Tab") { e.preventDefault(); onClose(); } // menus trap Tab; close instead
+    }
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
@@ -66,6 +88,8 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
     <div
       ref={ref}
       className="anim-in menu"
+      role="menu"
+      aria-label={`Acciones de ${target.name}`}
       style={{ position: "fixed", top: y, left: x, zIndex: 80, width: 210, padding: 6 }}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -114,10 +138,12 @@ function MenuItem({ children, icon, onClick, busy, danger }: {
   return (
     <button
       className="menu-item"
+      role="menuitem"
       onClick={onClick}
       disabled={busy}
       style={{
         display: "flex", alignItems: "center", gap: 9, width: "100%",
+        border: "none", background: "transparent", textAlign: "left", font: "inherit",
         color: danger ? "var(--color-danger)" : "var(--color-ink)",
         cursor: busy ? "default" : "pointer",
       }}

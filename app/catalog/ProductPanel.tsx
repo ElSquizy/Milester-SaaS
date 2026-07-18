@@ -320,10 +320,10 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
                 {[...catIds].map((id) => (
                   <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 8px", borderRadius: 7, background: "var(--color-surface-2)", border: "1px solid var(--color-divider)", fontSize: "0.8125rem", color: "var(--color-ink)" }}>
                     {catNameById.get(id) || `#${id}`}
-                    <button onClick={() => toggleCat(id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", padding: 0, fontSize: "1rem", lineHeight: 1 }}>×</button>
+                    <button onClick={() => toggleCat(id)} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", padding: 0, fontSize: "1rem", lineHeight: 1 }}>×</button>
                   </span>
                 ))}
-                {catIds.size === 0 && <span style={{ fontSize: "0.8125rem", color: "var(--color-faint)" }}>Sin colecciones</span>}
+                {catIds.size === 0 && <span style={{ fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Sin colecciones</span>}
               </div>
               {showPicker ? (
                 <CollectionPicker selectedIds={catIds} onToggle={(id, nm) => { setExtraCatNames((prev) => new Map(prev).set(id, nm)); toggleCat(id); }} />
@@ -441,7 +441,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     <div style={{ flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
         <label style={labelStyle}>{label}</label>
-        {hint && <span style={{ fontSize: "0.75rem", color: "var(--color-faint)" }}>{hint}</span>}
+        {hint && <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>{hint}</span>}
       </div>
       {children}
     </div>

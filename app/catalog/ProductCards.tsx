@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import type { CatalogProduct } from "./page";
+import { useDeferredRefresh } from "./useDeferredRefresh";
 
 interface Props {
   products: CatalogProduct[];
@@ -41,7 +41,7 @@ const parseNum = (v: string) => parseFloat(v.replace(/[^\d,.-]/g, "").replace(/\
 function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
   product: CatalogProduct; selected: boolean; onToggle: () => void; onOpen: () => void; onContextMenu: (e: React.MouseEvent) => void;
 }) {
-  const router = useRouter();
+  const refresh = useDeferredRefresh();
   const originalTags: string[] = (() => { try { return JSON.parse(product.tags); } catch { return []; } })();
   const multiVariant = product.variantCount > 1;
   const stockEditable = !multiVariant && !product.infiniteStock;
@@ -79,7 +79,7 @@ function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
       });
       if (res.ok) {
         setFlash(true);
-        setTimeout(() => { setFlash(false); router.refresh(); }, 900);
+        setTimeout(() => { setFlash(false); refresh(); }, 900);
       }
     } finally {
       setSaving(false);
@@ -109,13 +109,14 @@ function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
       <div style={{ position: "relative", aspectRatio: "1", background: "var(--color-surface-2)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", padding: 10 }}>
         {product.imageUrl
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={product.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+          ? <img src={product.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
           : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-faint)" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>}
 
         {/* Select checkbox */}
         <button
           onClick={onToggle}
-          aria-label="Seleccionar"
+          aria-label={`${selected ? "Deseleccionar" : "Seleccionar"} ${product.name}`}
+          aria-pressed={selected}
           style={{
             position: "absolute", top: 12, left: 12, width: 22, height: 22, borderRadius: 7,
             border: `1.5px solid ${selected ? "var(--color-brand)" : "rgba(255,255,255,0.9)"}`,
@@ -184,10 +185,10 @@ function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
           <label style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
             <span style={priceLabel}>Promocional</span>
             <div style={{ position: "relative" }}>
-              <span style={{ ...priceDollar, color: promo.trim() === "" ? "var(--color-faint)" : priceDollar.color }}>$</span>
+              <span style={{ ...priceDollar, color: promo.trim() === "" ? "var(--color-subtle)" : priceDollar.color }}>$</span>
               <input className="input" value={promo} onChange={(e) => setPromo(e.target.value)} placeholder="—"
                 style={{ paddingLeft: 20, fontWeight: 600, fontVariantNumeric: "tabular-nums",
-                  color: promo.trim() === "" ? "var(--color-faint)" : activePromo ? "var(--color-success)" : "var(--color-warning)" }} />
+                  color: promo.trim() === "" ? "var(--color-subtle)" : activePromo ? "var(--color-success)" : "var(--color-warning)" }} />
             </div>
           </label>
         </div>
@@ -260,6 +261,19 @@ function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z" /></svg>
             Editar
+          </button>
+          {/* On touch there is no right-click, so the card needs its own way in. */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onContextMenu(e); }}
+            aria-haspopup="menu"
+            aria-label={`Acciones de ${product.name}`}
+            title="Acciones"
+            className="btn-secondary"
+            style={{ flexShrink: 0, width: 44, height: 40, padding: 0, justifyContent: "center" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" />
+            </svg>
           </button>
           {flash ? (
             <span style={{ flex: 1, textAlign: "center", fontSize: "0.8125rem", color: "var(--color-success)", fontWeight: 600 }}>✓ Guardado</span>

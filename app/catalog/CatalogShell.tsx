@@ -231,7 +231,15 @@ export default function CatalogShell({
 
   const openMenu = useCallback((e: React.MouseEvent, p: CatalogProduct) => {
     e.preventDefault();
-    setMenuTarget({ id: p.id, name: p.name, pendingDelete: p.pendingDelete, syncStatus: p.syncStatus, x: e.clientX, y: e.clientY });
+    // Right-click gives pointer coordinates; a keyboard-activated button reports
+    // 0,0, so fall back to anchoring the menu under the trigger itself.
+    const fromPointer = e.clientX !== 0 || e.clientY !== 0;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenuTarget({
+      id: p.id, name: p.name, pendingDelete: p.pendingDelete, syncStatus: p.syncStatus,
+      x: fromPointer ? e.clientX : r.left,
+      y: fromPointer ? e.clientY : r.bottom + 4,
+    });
   }, []);
 
   // Persist the table/cards preference across sessions.

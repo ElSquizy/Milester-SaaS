@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect, Fragment } from "react";
-import { useRouter } from "next/navigation";
 import type { CatalogProduct } from "./page";
 import CategoryCell from "./CategoryCell";
+import { useDeferredRefresh } from "./useDeferredRefresh";
 
 interface Props {
   products: CatalogProduct[];
@@ -41,6 +41,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
               type="checkbox"
               checked={allSelected}
               onChange={onToggleAll}
+              aria-label={allSelected ? "Deseleccionar todos los productos" : "Seleccionar todos los productos"}
               style={{ cursor: "pointer", width: 15, height: 15, accentColor: "var(--color-brand)" }}
             />
           </th>
@@ -85,7 +86,8 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                   checked={isSelected}
                   onChange={() => onToggle(p.id)}
                   onClick={(e) => e.stopPropagation()}
-                  style={{ cursor: "pointer", width: 14, height: 14, accentColor: "var(--color-brand)" }}
+                  aria-label={`Seleccionar ${p.name}`}
+                  style={{ cursor: "pointer", width: 16, height: 16, accentColor: "var(--color-brand)" }}
                 />
               </td>
 
@@ -98,7 +100,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                 }}>
                   {p.imageUrl
                     // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={p.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    ? <img src={p.imageUrl} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-faint)" strokeWidth="1.5" strokeLinecap="round"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>}
                 </div>
               </td>
@@ -147,6 +149,22 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <VisibilityIcon published={p.published} />
                   <SyncIcon status={del ? "pending-delete" : p.syncStatus} lastSyncedAt={p.lastSyncedAt} />
+                  {/* Keyboard/touch path to the same actions as right-click. */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onContextMenu(e, p); }}
+                    aria-haspopup="menu"
+                    aria-label={`Acciones de ${p.name}`}
+                    title="Acciones"
+                    style={{
+                      width: 26, height: 26, flexShrink: 0, borderRadius: 8, border: "none",
+                      background: "transparent", color: "var(--color-subtle)", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" />
+                    </svg>
+                  </button>
                 </div>
               </td>
             </tr>
@@ -168,7 +186,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
 
 /** Inline-editable product name (commit on blur/Enter → local save). */
 function NameCell({ id, name, del }: { id: number; name: string; del: boolean }) {
-  const router = useRouter();
+  const refresh = useDeferredRefresh();
   const [val, setVal] = useState(name);
   const [busy, setBusy] = useState(false);
   useEffect(() => { setVal(name); }, [name]);
@@ -179,7 +197,7 @@ function NameCell({ id, name, del }: { id: number; name: string; del: boolean })
     setBusy(true);
     try {
       const res = await fetch(`/api/products/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: v }) });
-      if (res.ok) router.refresh();
+      if (res.ok) refresh();
     } finally { setBusy(false); }
   }
 
@@ -203,7 +221,7 @@ function NameCell({ id, name, del }: { id: number; name: string; del: boolean })
 
 /** Inline-editable stock; ∞ or read-only when unlimited or multi-variant. */
 function StockCell({ id, stock, infinite, editable }: { id: number; stock: number | null; infinite: boolean; editable: boolean }) {
-  const router = useRouter();
+  const refresh = useDeferredRefresh();
   const [raw, setRaw] = useState(stock == null ? "" : String(stock));
   const [busy, setBusy] = useState(false);
   useEffect(() => { setRaw(stock == null ? "" : String(stock)); }, [stock]);
@@ -214,7 +232,7 @@ function StockCell({ id, stock, infinite, editable }: { id: number; stock: numbe
   if (!editable) {
     return stock != null
       ? <span title="Stock por variante — editá en la edición avanzada" style={{ color }}>{stock.toLocaleString("es-AR")}</span>
-      : <span style={{ color: "var(--color-faint)" }}>—</span>;
+      : <span style={{ color: "var(--color-subtle)" }}>—</span>;
   }
 
   async function commit(dom: string) {
@@ -224,7 +242,7 @@ function StockCell({ id, stock, infinite, editable }: { id: number; stock: numbe
     setBusy(true);
     try {
       const res = await fetch(`/api/products/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stock: v }) });
-      if (res.ok) router.refresh();
+      if (res.ok) refresh();
     } finally { setBusy(false); }
   }
 
@@ -250,7 +268,7 @@ type LocalVariant = { tiendaNubeId: string | null; values: string[]; price: numb
 
 /** Expanded sub-rows: a product's variants with inline-editable price/promo/stock (local, staged). */
 function VariantRows({ productId }: { productId: number }) {
-  const router = useRouter();
+  const refresh = useDeferredRefresh();
   const [rows, setRows] = useState<LocalVariant[] | null>(null);
   useEffect(() => {
     // Labels (attribute values) from the live TN state; price/promo/stock from the local
@@ -272,7 +290,7 @@ function VariantRows({ productId }: { productId: number }) {
     const body: Record<string, unknown> = { tiendaNubeId: tnId };
     body[field] = raw.trim() === "" ? null : raw;
     await fetch(`/api/products/${productId}/variants`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    router.refresh();
+    refresh();
   }
 
   if (rows === null) return <div style={{ padding: "10px 20px 10px 68px", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Cargando variantes…</div>;
@@ -326,7 +344,7 @@ function fmtMoney(raw: string): string {
 function PriceField({ id, field, value, base }: {
   id: number; field: "price" | "promotionalPrice"; value: number | null; base: number;
 }) {
-  const router = useRouter();
+  const refresh = useDeferredRefresh();
   const [raw, setRaw] = useState(value != null ? String(value) : "");
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -351,7 +369,7 @@ function PriceField({ id, field, value, base }: {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(field === "price" ? { price: bodyVal } : { promotionalPrice: bodyVal }),
       });
-      if (res.ok) { setFlash(true); setTimeout(() => setFlash(false), 900); router.refresh(); }
+      if (res.ok) { setFlash(true); setTimeout(() => setFlash(false), 900); refresh(); }
     } finally { setBusy(false); }
   }
 
@@ -455,7 +473,7 @@ function SyncIcon({ status, lastSyncedAt }: { status: string; lastSyncedAt: Date
 
 function SalesCell({ unitsSold, lastSoldAt }: { unitsSold: number; lastSoldAt: Date | string | null }) {
   if (unitsSold === 0) {
-    return <span style={{ color: "var(--color-faint)" }}>—</span>;
+    return <span style={{ color: "var(--color-subtle)" }}>—</span>;
   }
   // Flag dead stock: last sale older than 60 days.
   const stale = lastSoldAt
