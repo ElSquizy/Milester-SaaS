@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="es" className={`${inter.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body style={{ display: "flex", minHeight: "100dvh" }}>
         <AppChrome />
-        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="app-main" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {children}
         </div>
       </body>

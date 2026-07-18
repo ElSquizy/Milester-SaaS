@@ -48,6 +48,21 @@
   --shadow-dropdown: 0 8px 24px -6px rgba(17, 24, 39, 0.10), 0 2px 6px rgba(17, 24, 39, 0.04);
 }
 
+/* ── Z-index scale ───────────────────────────── */
+:root {
+  --z-sticky:      100;
+  --z-drawer:      200;  /* mobile sidebar drawer */
+  --z-backdrop:    190;  /* backdrop behind the drawer */
+  --z-topbar:      150;  /* mobile top bar */
+  --z-dropdown:    300;
+  --z-modal:       400;
+  --z-toast:       500;
+}
+
+/* ── Responsive breakpoint ───────────────────────
+   The app is desktop-first; below --bp-mobile (768px) the fixed sidebar
+   becomes an off-canvas drawer opened from a top bar. */
+
 /* ── Base ────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -264,6 +279,73 @@ select.input { cursor: pointer; }
 
 .alert-card { transition: border-color 0.14s, transform 0.14s, box-shadow 0.14s; }
 .alert-card:hover { border-color: var(--color-faint); transform: translateY(-1px); box-shadow: var(--shadow-float); }
+
+/* ── App chrome (sidebar / mobile drawer) ────── */
+.app-sidebar {
+  width: 216px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow-y: auto;
+  z-index: var(--z-sticky);
+}
+
+/* Mobile top bar — hidden on desktop. */
+.app-topbar { display: none; }
+
+/* Backdrop behind the open drawer — hidden on desktop. */
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 767px) {
+  .app-sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-float);
+    z-index: var(--z-drawer);
+    width: 264px;
+  }
+  .app-sidebar[data-open="true"] { transform: translateX(0); }
+
+  .app-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 52px;
+    padding: 0 12px;
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: var(--z-topbar);
+  }
+
+  /* Push the main content below the fixed top bar. */
+  .app-main { padding-top: 52px; }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(17, 24, 39, 0.4);
+    z-index: var(--z-backdrop);
+    animation: fadeIn 0.2s ease-out both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-sidebar { transition: none; }
+}
 
 /* ── Reduced motion ──────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
