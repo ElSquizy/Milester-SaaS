@@ -105,7 +105,16 @@ export default function Sidebar() {
   const [push, setPush] = useState<{ active: boolean; done: number; total: number; errors: number }>({ active: false, done: 0, total: 0, errors: 0 });
   const [lastPull, setLastPull] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false); // desktop: hide the sidebar
   const esRef = useRef<EventSource | null>(null);
+
+  // Restore the desktop collapse preference.
+  useEffect(() => {
+    setCollapsed(localStorage.getItem("milester-sidebar-collapsed") === "1");
+  }, []);
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((c) => { const n = !c; localStorage.setItem("milester-sidebar-collapsed", n ? "1" : "0"); return n; });
+  }, []);
 
   const refreshPending = useCallback(() => {
     fetch("/api/sync", { method: "POST" })
@@ -239,7 +248,21 @@ export default function Sidebar() {
     {/* Backdrop — only rendered on mobile when the drawer is open. */}
     {drawerOpen && <div className="sidebar-backdrop" onClick={() => setDrawerOpen(false)} />}
 
-    <aside className="app-sidebar" data-open={drawerOpen}>
+    {/* Floating re-open button — desktop only, shown while collapsed. */}
+    {collapsed && (
+      <button
+        className="sidebar-reopen"
+        onClick={toggleCollapsed}
+        aria-label="Mostrar panel lateral"
+        title="Mostrar panel lateral"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" />
+        </svg>
+      </button>
+    )}
+
+    <aside className="app-sidebar" data-open={drawerOpen} data-collapsed={collapsed}>
       {/* Wordmark */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
@@ -262,6 +285,23 @@ export default function Sidebar() {
         }}>
           Milester
         </span>
+        {/* Collapse — desktop only (hidden on mobile, which uses the drawer). */}
+        <button
+          className="sidebar-collapse-btn"
+          onClick={toggleCollapsed}
+          aria-label="Ocultar panel lateral"
+          title="Ocultar panel lateral"
+          style={{
+            marginLeft: "auto", width: 28, height: 28, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            border: "none", background: "transparent", cursor: "pointer",
+            color: "var(--color-subtle)", borderRadius: 8,
+          }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><path d="M15 9l-2 3 2 3" />
+          </svg>
+        </button>
       </div>
 
       {/* Navigation */}
