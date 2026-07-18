@@ -23,7 +23,7 @@ export default function ProductCards({ products, selected, onToggle, onContextMe
   }
 
   return (
-    <div style={{
+    <div className="catalog-cards" style={{
       display: "grid",
       gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))",
       gap: 18,

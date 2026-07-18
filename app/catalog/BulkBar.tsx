@@ -45,7 +45,7 @@ export default function BulkBar({ count, ids, categories, onClear, onDone }: Pro
   }
 
   return (
-    <div style={{
+    <div className="bulkbar-wrap" style={{
       position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
       zIndex: 60,
       display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
@@ -120,7 +120,7 @@ export default function BulkBar({ count, ids, categories, onClear, onDone }: Pro
       )}
 
       {/* Main bar */}
-      <div className="anim-modal" style={{
+      <div className="anim-modal bulkbar-main" style={{
         display: "flex", alignItems: "center", gap: 6,
         padding: "10px 16px",
         background: "var(--color-ink)", borderRadius: 16,

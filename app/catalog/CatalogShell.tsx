@@ -10,6 +10,7 @@ import BulkBar from "./BulkBar";
 import ProductModal from "./ProductModal";
 import ProductContextMenu, { type MenuTarget } from "./ProductContextMenu";
 import { useFocus } from "./useFocus";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type EditProduct = {
   id: number;
@@ -199,9 +200,12 @@ export default function CatalogShell({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
 
+  const isMobile = useIsMobile();
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [localQ, setLocalQ] = useState(currentQ);
   const [view, setView] = useState<"table" | "cards">("table");
+  // The wide table is unusable on phones — always show cards there.
+  const effectiveView = isMobile ? "cards" : view;
   const [advanced, setAdvanced] = useState(false);
   // Lives here (not in the modal) so it survives moving between products.
   const [modalTab, setModalTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo">("general");
@@ -313,12 +317,12 @@ export default function CatalogShell({
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
       {/* Header + filters */}
-      <div style={{
+      <div className="catalog-header" style={{
         padding: "28px 32px 18px",
         background: "var(--color-bg)",
         flexShrink: 0,
       }}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
+        <div className="catalog-header-row" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
           <div>
             <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0 0 3px", letterSpacing: "-0.02em" }}>
               Catálogo
@@ -356,8 +360,8 @@ export default function CatalogShell({
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
               Plantillas
             </Link>
-            {/* View toggle */}
-            <div style={{ display: "flex", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-control)", padding: 3 }}>
+            {/* View toggle — hidden on mobile, where cards are forced */}
+            <div style={{ display: isMobile ? "none" : "flex", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-control)", padding: 3 }}>
               {([
                 { v: "table", label: "Tabla", icon: <><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><rect x="3" y="4" width="18" height="16" rx="1" /></> },
                 { v: "cards", label: "Tarjetas", icon: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></> },
@@ -385,8 +389,8 @@ export default function CatalogShell({
         {/* Filter bar */}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {/* Row 1: search + collection + sort + clear */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ position: "relative", flex: 1, maxWidth: 340 }}>
+          <div className="catalog-filter-row1" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className="catalog-search" style={{ position: "relative", flex: 1, maxWidth: 340 }}>
               <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", zIndex: 1 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2" strokeLinecap="round">
                   <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -406,7 +410,7 @@ export default function CatalogShell({
             <select
               value={currentSort}
               onChange={(e) => updateParam("sort", e.target.value === "recent" ? "" : e.target.value)}
-              className="input" style={{ width: "auto", marginLeft: "auto" }}
+              className="input catalog-sort" style={{ width: "auto", marginLeft: "auto" }}
             >
               <option value="recent">Más recientes</option>
               <option value="oldest">Más antiguos</option>
@@ -439,7 +443,7 @@ export default function CatalogShell({
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
         {/* Table / cards area */}
         <div style={{ flex: 1, overflow: "auto", padding: "0" }}>
-          {view === "table" ? (
+          {effectiveView === "table" ? (
             <ProductTable
               products={products}
               selected={selected}

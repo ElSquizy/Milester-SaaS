@@ -347,6 +347,24 @@ select.input { cursor: pointer; }
   .app-sidebar { transition: none; }
 }
 
+/* ── Catalog responsive ──────────────────────── */
+@media (max-width: 767px) {
+  /* Header + filters: tighter padding, actions and filter rows wrap. */
+  .catalog-header { padding: 18px 16px 14px !important; }
+  .catalog-header-row { flex-wrap: wrap; gap: 10px !important; }
+  .catalog-filter-row1 { flex-wrap: wrap; }
+  .catalog-filter-row1 > * { flex: 1 1 auto; }
+  .catalog-search { max-width: none !important; flex-basis: 100% !important; }
+  .catalog-sort { margin-left: 0 !important; }
+
+  /* Body: less horizontal padding for the card grid. */
+  .catalog-cards { padding: 16px !important; gap: 12px !important; }
+
+  /* Bulk action bar: keep it on screen and let it wrap. */
+  .bulkbar-wrap { left: 12px !important; right: 12px !important; transform: none !important; }
+  .bulkbar-main { flex-wrap: wrap; justify-content: center; max-width: 100%; }
+}
+
 /* ── Reduced motion ──────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .anim-up, .anim-in, .anim-panel, .anim-modal { animation: none; }
