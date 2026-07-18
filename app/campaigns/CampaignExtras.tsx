@@ -57,7 +57,9 @@ export function ProductPicker({ picked, onChange }: { picked: PickedProduct[]; o
   );
 }
 
-type Item = { productId: number; name: string; imageUrl: string | null; sku: string | null; basePrice: number; promoPrice: number };
+type VariantPrice = { variantId: number; campaignPrice: number };
+type Item = { productId: number; name: string; imageUrl: string | null; sku: string | null; basePrice: number; promoPrice: number; variantPrices: VariantPrice[] };
+type VariantInfo = { id: number; label: string; price: number; promotionalPrice: number | null };
 
 /**
  * Editable product/price list for a campaign. Works for drafts (edit → Activar) and for
@@ -73,6 +75,10 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [gridOpen, setGridOpen] = useState(false);
+  // Multi-variant support: variantMeta lists a product's variants; variantPrices
+  // holds the per-variant campaign price being edited.
+  const [variantMeta, setVariantMeta] = useState<Map<number, VariantInfo[]>>(new Map());
+  const [variantPrices, setVariantPrices] = useState<Map<number, Map<number, number>>>(new Map());
   const isActive = status === "active";
 
   const load = useCallback(() => {
@@ -82,9 +88,47 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
   }, [campaignId]);
   useEffect(() => { load(); }, [load]);
 
+  // Fetch variant metadata for the current items; seed per-variant prices from
+  // the stored campaign values, falling back to each variant's base price.
+  useEffect(() => {
+    const ids = items.map((i) => i.productId);
+    if (ids.length === 0) { setVariantMeta(new Map()); return; }
+    fetch("/api/products/variants", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) })
+      .then((r) => r.json())
+      .then((data: Record<string, VariantInfo[]>) => {
+        const meta = new Map<number, VariantInfo[]>();
+        for (const [pid, vs] of Object.entries(data)) meta.set(Number(pid), vs);
+        setVariantMeta(meta);
+        setVariantPrices((prev) => {
+          const next = new Map(prev);
+          for (const [pid, vs] of meta) {
+            if (next.has(pid)) continue; // don't clobber in-progress edits
+            const stored = new Map((items.find((i) => i.productId === pid)?.variantPrices ?? []).map((v) => [v.variantId, v.campaignPrice]));
+            const m = new Map<number, number>();
+            vs.forEach((v) => m.set(v.id, stored.get(v.id) ?? v.price));
+            next.set(pid, m);
+          }
+          return next;
+        });
+      })
+      .catch(() => setVariantMeta(new Map()));
+    // Seed only when the set of item ids changes (add/remove), not on every price keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.map((i) => i.productId).join(",")]);
+
   function setPromo(productId: number, val: string) {
     const n = parseFloat(val.replace(/\./g, "").replace(",", "."));
     setItems((prev) => prev.map((i) => i.productId === productId ? { ...i, promoPrice: isNaN(n) ? 0 : n } : i));
+  }
+  function setVariantPrice(pid: number, vid: number, val: string) {
+    const n = parseFloat(val.replace(/\./g, "").replace(",", "."));
+    setVariantPrices((prev) => {
+      const next = new Map(prev);
+      const m = new Map(next.get(pid) ?? []);
+      m.set(vid, isNaN(n) ? 0 : n);
+      next.set(pid, m);
+      return next;
+    });
   }
   function removeItem(productId: number) {
     setItems((prev) => prev.filter((i) => i.productId !== productId));
@@ -93,7 +137,7 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
     setGridOpen(false);
     setItems((prev) => {
       const byId = new Map(prev.map((i) => [i.productId, i]));
-      return picked.map((p) => byId.get(p.id) ?? { productId: p.id, name: p.name, imageUrl: p.imageUrl, sku: null, basePrice: p.price, promoPrice: p.price });
+      return picked.map((p) => byId.get(p.id) ?? { productId: p.id, name: p.name, imageUrl: p.imageUrl, sku: null, basePrice: p.price, promoPrice: p.price, variantPrices: [] });
     });
   }
 
@@ -103,7 +147,21 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
     const removeIds = [...originalIds].filter((id) => !currentIds.has(id));
     await fetch(`/api/campaigns/${campaignId}/items`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addIds, removeIds, prices: items.map((i) => ({ productId: i.productId, promoPrice: i.promoPrice })) }),
+      body: JSON.stringify({
+        addIds, removeIds,
+        prices: items.map((i) => {
+          const vs = variantMeta.get(i.productId);
+          const vp = variantPrices.get(i.productId);
+          // For multi-variant products the product-level promo mirrors the first
+          // (lowest-id) variant — the one the outbound sync makes follow the product.
+          const promoPrice = vs && vp && vs.length ? (vp.get(vs[0].id) ?? vs[0].price) : i.promoPrice;
+          return {
+            productId: i.productId,
+            promoPrice,
+            ...(vs && vp ? { variantPrices: vs.map((v) => ({ variantId: v.id, campaignPrice: vp.get(v.id) ?? v.price })) } : {}),
+          };
+        }),
+      }),
     });
   }
 
@@ -158,27 +216,49 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
           ) : items.length === 0 ? (
             <div style={{ padding: 24, textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Sin productos. Agregá con el botón de arriba.</div>
           ) : items.map((it) => {
+            const vs = variantMeta.get(it.productId);
             const off = it.basePrice > 0 ? Math.round((1 - it.promoPrice / it.basePrice) * 100) : 0;
             return (
-              <div key={it.productId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderBottom: "1px solid var(--color-divider)" }}>
-                {it.imageUrl
-                  // eslint-disable-next-line @next/next/no-img-element
-                  ? <img src={it.imageUrl} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                  : <span style={{ width: 34, height: 34, borderRadius: 8, background: "var(--color-surface-2)", flexShrink: 0 }} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
-                  <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>
-                    Base ${it.basePrice.toLocaleString("es-AR")}
-                    {off > 0 && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · −{off}%</span>}
+              <div key={it.productId} style={{ borderBottom: "1px solid var(--color-divider)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px" }}>
+                  {it.imageUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={it.imageUrl} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                    : <span style={{ width: 34, height: 34, borderRadius: 8, background: "var(--color-surface-2)", flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                    <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>
+                      {vs && vs.length ? `${vs.length} variantes` : <>Base ${it.basePrice.toLocaleString("es-AR")}{off > 0 && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · −{off}%</span>}</>}
+                    </div>
                   </div>
+                  {!(vs && vs.length) && (
+                    <div style={{ position: "relative", width: 100, flexShrink: 0 }}>
+                      <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
+                      <input className="input" value={it.promoPrice} onChange={(e) => setPromo(it.productId, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px" }} />
+                    </div>
+                  )}
+                  <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  </button>
                 </div>
-                <div style={{ position: "relative", width: 100, flexShrink: 0 }}>
-                  <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
-                  <input className="input" value={it.promoPrice} onChange={(e) => setPromo(it.productId, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px" }} />
-                </div>
-                <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
+
+                {/* Per-variant prices */}
+                {vs && vs.map((v) => {
+                  const vp = variantPrices.get(it.productId)?.get(v.id) ?? v.price;
+                  const voff = v.price > 0 ? Math.round((1 - vp / v.price) * 100) : 0;
+                  return (
+                    <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 8px 7px 44px", background: "var(--color-surface-2)" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.8125rem", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label || "Variante"}</div>
+                        <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>Base ${v.price.toLocaleString("es-AR")}{voff > 0 && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · −{voff}%</span>}</div>
+                      </div>
+                      <div style={{ position: "relative", width: 100, flexShrink: 0 }}>
+                        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
+                        <input className="input" value={vp} onChange={(e) => setVariantPrice(it.productId, v.id, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px" }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}

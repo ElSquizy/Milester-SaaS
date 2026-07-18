@@ -18,6 +18,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     categoryName: i.product?.categoryName ?? null,
     basePrice: i.originalPrice,
     promoPrice: i.campaignPrice,
+    variantPrices: parseVariantPrices(i.variantPrices),
   })));
 }
 
@@ -54,9 +55,16 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     for (const row of prices) {
       const promo = Number(row.promoPrice);
       if (isNaN(promo)) continue;
+      // Per-variant prices (multi-variant products): stored as JSON so each
+      // variant gets its own campaign price when the campaign applies.
+      const vps = Array.isArray(row.variantPrices)
+        ? row.variantPrices
+            .map((v: { variantId: unknown; campaignPrice: unknown }) => ({ variantId: Number(v.variantId), campaignPrice: Number(v.campaignPrice) }))
+            .filter((v: { variantId: number; campaignPrice: number }) => !isNaN(v.variantId) && !isNaN(v.campaignPrice))
+        : null;
       await prisma.campaignItem.updateMany({
         where: { campaignId, productId: Number(row.productId) },
-        data: { campaignPrice: promo },
+        data: { campaignPrice: promo, ...(vps ? { variantPrices: JSON.stringify(vps) } : {}) },
       });
     }
   }
