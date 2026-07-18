@@ -457,6 +457,7 @@ export default function CatalogShell({
               products={products}
               selected={selected}
               onToggle={toggleSelect}
+              onOpen={openEdit}
               onContextMenu={openMenu}
             />
           )}
