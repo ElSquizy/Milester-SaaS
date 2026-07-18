@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import ProductGridModal from "../campaigns/ProductGridModal";
 import type { PickedProduct } from "../campaigns/CampaignExtras";
+import { useIsMobile } from "@/components/useIsMobile";
 
 type Cat = { id: number; tiendaNubeId: string; name: string; parentTnId: string | null; count: number };
 type Node = Cat & { children: Node[]; total: number };
 
 export default function CollectionsClient({ categories }: { categories: Cat[] }) {
   const router = useRouter();
+  const isMobile = useIsMobile();
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const [managing, setManaging] = useState<Cat | null>(null);
@@ -55,20 +57,20 @@ export default function CollectionsClient({ categories }: { categories: Cat[] })
   }
 
   return (
-    <div style={{ height: "100dvh", overflowY: "auto", padding: "48px 48px 80px" }}>
+    <div style={{ height: "100dvh", overflowY: "auto", padding: isMobile ? "24px 16px 80px" : "48px 48px 80px" }}>
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
 
         {/* Header */}
-        <div className="anim-up" style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 28, gap: 16 }}>
+        <div className="anim-up" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "stretch" : "flex-end", justifyContent: "space-between", marginBottom: isMobile ? 20 : 28, gap: 16 }}>
           <div>
-            <h1 style={{ fontSize: "1.75rem", fontWeight: 600, letterSpacing: "-0.02em", margin: "0 0 4px", lineHeight: 1.1 }}>
+            <h1 style={{ fontSize: isMobile ? "1.5rem" : "1.75rem", fontWeight: 600, letterSpacing: "-0.02em", margin: "0 0 4px", lineHeight: 1.1 }}>
               Colecciones
             </h1>
             <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: 0 }}>
               {categories.length} colecciones · {rootCount} principales. Gestioná qué productos hay en cada una.
             </p>
           </div>
-          <button className="btn-primary" onClick={() => setCreating(true)} style={{ whiteSpace: "nowrap" }}>
+          <button className="btn-primary" onClick={() => setCreating(true)} style={{ whiteSpace: "nowrap", justifyContent: "center" }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             Nueva colección
           </button>
@@ -95,7 +97,7 @@ export default function CollectionsClient({ categories }: { categories: Cat[] })
               <div style={{ padding: "40px", textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Sin resultados</div>
             ) : (
               visible.map((c, i) => (
-                <Row key={c.id} cat={c} depth={0} first={i === 0} hasChildren={false} collapsed={false} busy={busyId === c.id} onManage={() => setManaging(c)} onDuplicate={() => duplicate(c)} onDelete={() => remove(c)} onMove={() => setMoving(c)} />
+                <Row key={c.id} cat={c} depth={0} first={i === 0} hasChildren={false} collapsed={false} busy={busyId === c.id} isMobile={isMobile} onManage={() => setManaging(c)} onDuplicate={() => duplicate(c)} onDelete={() => remove(c)} onMove={() => setMoving(c)} />
               ))
             )
           ) : (
@@ -103,7 +105,7 @@ export default function CollectionsClient({ categories }: { categories: Cat[] })
               <Row
                 key={r.cat.id} cat={r.cat} depth={r.depth} first={i === 0}
                 hasChildren={r.hasChildren} collapsed={collapsed.has(r.cat.id)}
-                busy={busyId === r.cat.id}
+                busy={busyId === r.cat.id} isMobile={isMobile}
                 onToggleCollapse={() => toggleCollapse(r.cat.id)}
                 onManage={() => setManaging(r.cat)}
                 onDuplicate={() => duplicate(r.cat)}
@@ -144,9 +146,9 @@ export default function CollectionsClient({ categories }: { categories: Cat[] })
   );
 }
 
-function Row({ cat, depth, first, hasChildren, collapsed, busy, onToggleCollapse, onManage, onDuplicate, onDelete, onMove }: {
+function Row({ cat, depth, first, hasChildren, collapsed, busy, isMobile, onToggleCollapse, onManage, onDuplicate, onDelete, onMove }: {
   cat: Cat; depth: number; first: boolean;
-  hasChildren: boolean; collapsed: boolean; busy: boolean; onToggleCollapse?: () => void;
+  hasChildren: boolean; collapsed: boolean; busy: boolean; isMobile: boolean; onToggleCollapse?: () => void;
   onManage: () => void; onDuplicate: () => void; onDelete: () => void; onMove: () => void;
 }) {
   const [hover, setHover] = useState(false);
@@ -155,13 +157,18 @@ function Row({ cat, depth, first, hasChildren, collapsed, busy, onToggleCollapse
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: "flex", alignItems: "center", gap: 8,
-        padding: "11px 16px", paddingLeft: 16 + depth * 20,
+        display: "flex",
+        flexDirection: isMobile ? "column" : "row",
+        alignItems: isMobile ? "stretch" : "center", gap: isMobile ? 8 : 8,
+        padding: isMobile ? "12px 14px" : "11px 16px",
+        paddingLeft: (isMobile ? 14 : 16) + depth * (isMobile ? 14 : 20),
         borderTop: first ? "none" : "1px solid var(--color-divider)",
-        background: hover ? "var(--color-surface-2)" : "transparent",
+        background: hover && !isMobile ? "var(--color-surface-2)" : "transparent",
         transition: "background 0.12s",
       }}
     >
+      {/* Name row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
       {hasChildren ? (
         <button onClick={onToggleCollapse} style={{
           width: 18, height: 18, border: "none", background: "transparent", cursor: "pointer",
@@ -187,11 +194,19 @@ function Row({ cat, depth, first, hasChildren, collapsed, busy, onToggleCollapse
 
       {busy && <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>…</span>}
 
-      <span className="pill pill-neutral" style={{ fontVariantNumeric: "tabular-nums" }}>
+      <span className="pill pill-neutral" style={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
         {cat.count.toLocaleString("es-AR")}
       </span>
+      </div>
 
-      <div style={{ display: "flex", gap: 4, alignItems: "center", opacity: hover && !busy ? 1 : 0, transition: "opacity 0.12s", pointerEvents: hover && !busy ? "auto" : "none" }}>
+      {/* Actions row — hover-revealed on desktop, always visible on mobile (no hover on touch) */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, ...(isMobile ? { flexWrap: "wrap" } : {}) }}>
+      <div style={{
+        display: "flex", gap: 4, alignItems: "center",
+        ...(isMobile
+          ? { flexWrap: "wrap" }
+          : { opacity: hover && !busy ? 1 : 0, transition: "opacity 0.12s", pointerEvents: hover && !busy ? "auto" : "none" }),
+      }}>
         <button onClick={onManage} className="btn-secondary" style={{ padding: "5px 11px", fontSize: "0.75rem" }}>Gestionar</button>
         <button onClick={onDuplicate} title="Duplicar colección" className="btn-secondary" style={{ padding: "5px 8px", fontSize: "0.75rem" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
@@ -213,6 +228,7 @@ function Row({ cat, depth, first, hasChildren, collapsed, busy, onToggleCollapse
       >
         Ver →
       </Link>
+      </div>
     </div>
   );
 }
@@ -221,6 +237,7 @@ function Row({ cat, depth, first, hasChildren, collapsed, busy, onToggleCollapse
 function NewCollectionModal({ roots, onClose, onCreated }: {
   roots: Cat[]; onClose: () => void; onCreated: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [name, setName] = useState("");
   const [parent, setParent] = useState(""); // tiendaNubeId of parent, "" = root
   const [saving, setSaving] = useState(false);
@@ -243,7 +260,7 @@ function NewCollectionModal({ roots, onClose, onCreated }: {
   }
 
   return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 24px" }}>
+    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: isMobile ? 400 : 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? "24px 16px" : "80px 24px" }}>
       <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 440, background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--color-divider)", fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.02em" }}>Nueva colección</div>
         <div style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -274,6 +291,7 @@ function NewCollectionModal({ roots, onClose, onCreated }: {
 function MoveCollectionModal({ collection, categories, onClose, onMoved }: {
   collection: Cat; categories: Cat[]; onClose: () => void; onMoved: () => void;
 }) {
+  const isMobile = useIsMobile();
   const currentParent = collection.parentTnId && collection.parentTnId !== "0" ? collection.parentTnId : "";
   const [parent, setParent] = useState(currentParent);
   const [saving, setSaving] = useState(false);
@@ -330,7 +348,7 @@ function MoveCollectionModal({ collection, categories, onClose, onMoved }: {
   }
 
   return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "80px 24px" }}>
+    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: isMobile ? 400 : 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? "24px 16px" : "80px 24px" }}>
       <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 440, background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", overflow: "hidden" }}>
         <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--color-divider)", fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.02em" }}>Mover «{collection.name}»</div>
         <div style={{ padding: "22px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -358,6 +376,7 @@ function MoveCollectionModal({ collection, categories, onClose, onMoved }: {
 function CollectionPanel({ collection, categoryNames, onClose, onSaved }: {
   collection: Cat; categoryNames: string[]; onClose: () => void; onSaved: () => void;
 }) {
+  const isMobile = useIsMobile();
   const [members, setMembers] = useState<PickedProduct[] | null>(null);
   const [gridOpen, setGridOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -402,8 +421,8 @@ function CollectionPanel({ collection, categoryNames, onClose, onSaved }: {
 
   return (
     <>
-      <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 55, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "56px 24px" }}>
-        <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 540, maxHeight: "calc(100dvh - 112px)", background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: isMobile ? 400 : 55, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? 0 : "56px 24px" }}>
+        <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: isMobile ? "none" : 540, height: isMobile ? "100dvh" : undefined, maxHeight: isMobile ? "100dvh" : "calc(100dvh - 112px)", background: "var(--color-surface)", borderRadius: isMobile ? 0 : "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
           <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--color-divider)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
             <div>
