@@ -226,12 +226,15 @@ function StockCell({ id, stock, infinite, editable }: { id: number; stock: numbe
   const [busy, setBusy] = useState(false);
   useEffect(() => { setRaw(stock == null ? "" : String(stock)); }, [stock]);
 
-  const color = stock === 0 ? "var(--color-danger)" : stock != null && stock < 5 ? "var(--color-warning)" : "var(--color-muted)";
+  // A single low digit is easy to miss on colour alone at this size — weight it too.
+  const low = stock != null && stock < 5;
+  const color = stock === 0 ? "var(--color-danger)" : low ? "var(--color-warning)" : "var(--color-muted)";
+  const weight = stock === 0 || low ? 700 : 500;
 
   if (infinite) return <span title="Stock ilimitado" style={{ color: "var(--color-muted)", fontSize: "1rem" }}>∞</span>;
   if (!editable) {
     return stock != null
-      ? <span title="Stock por variante — editá en la edición avanzada" style={{ color }}>{stock.toLocaleString("es-AR")}</span>
+      ? <span title="Stock por variante — editá en la edición avanzada" style={{ color, fontWeight: weight }}>{stock.toLocaleString("es-AR")}</span>
       : <span style={{ color: "var(--color-subtle)" }}>—</span>;
   }
 
@@ -258,7 +261,7 @@ function StockCell({ id, stock, infinite, editable }: { id: number; stock: numbe
       placeholder="0"
       style={{
         width: 58, border: "1px solid transparent", background: "transparent", outline: "none",
-        textAlign: "right", fontVariantNumeric: "tabular-nums", color, padding: "3px 6px", borderRadius: 7, cursor: "text",
+        textAlign: "right", fontVariantNumeric: "tabular-nums", color, fontWeight: weight, padding: "3px 6px", borderRadius: 7, cursor: "text",
       }}
     />
   );
@@ -404,68 +407,85 @@ function PriceField({ id, field, value, base }: {
   );
 }
 
-function IconChip({ color, bg, title, spin, children }: {
-  color: string; bg: string; title: string; spin?: boolean; children: React.ReactNode;
+/**
+ * Status glyph. Two tones, and the difference is the whole point:
+ *
+ *  "quiet" — the healthy default (published, synced). Nearly every row is in this
+ *            state, so a filled chip here just adds noise and leaves the states
+ *            that DO need attention nothing to stand out against.
+ *  "solid" — needs attention (modified, error, will-be-deleted). Saturated fill,
+ *            white glyph, so a single one of these is unmissable in a long list.
+ */
+function IconChip({ color, title, tone = "quiet", spin, children }: {
+  color: string; title: string; tone?: "quiet" | "solid"; spin?: boolean; children: React.ReactNode;
 }) {
+  const solid = tone === "solid";
   return (
     <span
       title={title}
+      role="img"
+      aria-label={title}
       style={{
         width: 26, height: 26, borderRadius: 8, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
-        background: bg, color,
+        background: solid ? color : "transparent",
+        color: solid ? "#fff" : color,
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={spin ? "anim-spin" : undefined}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={solid ? 2.2 : 2} strokeLinecap="round" strokeLinejoin="round" className={spin ? "anim-spin" : undefined}>
         {children}
       </svg>
     </span>
   );
 }
 
+// Visibility is binary metadata, not a health signal — the glyph carries it and
+// the colour stays out of the way so the sync column can own the attention.
 function VisibilityIcon({ published }: { published: boolean }) {
   return published ? (
-    <IconChip color="var(--color-success-icon)" bg="var(--color-success-bg)" title="Publicado">
+    <IconChip color="var(--color-faint)" title="Publicado">
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
     </IconChip>
   ) : (
-    <IconChip color="var(--color-subtle)" bg="var(--color-surface-2)" title="Oculto">
+    <IconChip color="var(--color-muted)" title="Oculto">
       <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" />
     </IconChip>
   );
 }
 
 function SyncIcon({ status, lastSyncedAt }: { status: string; lastSyncedAt: Date | string | null }) {
+  // Anything that needs the user to act gets a solid, saturated block.
   if (status === "pending-delete") {
     return (
-      <IconChip color="var(--color-danger-icon)" bg="var(--color-danger-bg, #FEF2F2)" title="Se eliminará al sincronizar">
+      <IconChip color="var(--color-danger)" tone="solid" title="Se eliminará al sincronizar">
         <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       </IconChip>
     );
   }
   if (status === "error") {
     return (
-      <IconChip color="var(--color-danger-icon)" bg="var(--color-danger-bg, #FEF2F2)" title="Error al sincronizar">
+      <IconChip color="var(--color-danger)" tone="solid" title="Error al sincronizar">
         <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
       </IconChip>
     );
   }
   if (status === "syncing") {
     return (
-      <IconChip color="var(--color-brand)" bg="var(--color-brand-light)" title="Sincronizando…" spin>
+      <IconChip color="var(--color-brand)" tone="solid" title="Sincronizando…" spin>
         <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
       </IconChip>
     );
   }
   if (status === "modified" || status === "pending") {
     return (
-      <IconChip color="var(--color-warning-icon)" bg="var(--color-warning-bg)" title="Cambios sin sincronizar">
+      <IconChip color="var(--color-warning)" tone="solid" title="Cambios sin sincronizar">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
       </IconChip>
     );
   }
+  // Synced is the norm: present, but it never competes for attention.
   return (
-    <IconChip color="var(--color-success-icon)" bg="var(--color-success-bg)" title={lastSyncedAt ? `Sincronizado ${formatDate(lastSyncedAt)}` : "Sincronizado"}>
+    <IconChip color="var(--color-success-icon)" title={lastSyncedAt ? `Sincronizado ${formatDate(lastSyncedAt)}` : "Sincronizado"}>
       <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><polyline points="9 15 11 17 15 12" />
     </IconChip>
   );
