@@ -201,6 +201,7 @@ export default function CatalogShell({
   const [, startTransition] = useTransition();
 
   const isMobile = useIsMobile();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [localQ, setLocalQ] = useState(currentQ);
   const [view, setView] = useState<"table" | "cards">("table");
@@ -258,6 +259,9 @@ export default function CatalogShell({
   // Tri-state filter chips: click cycles off → include → exclude → off.
   const statusMap = parseTri(currentStatus);
   const flagMap = parseTri(currentFlag);
+  const collectionMap = parseTri(currentCategory);
+  // How many filter facets are active (for the mobile filters button badge).
+  const activeFilterCount = statusMap.size + flagMap.size + collectionMap.size + (currentSort && currentSort !== "recent" ? 1 : 0);
   const cycleFilter = useCallback((param: string, value: string) => {
     const m = parseTri(searchParams.get(param) || "");
     const cur = m.get(value);
@@ -386,7 +390,47 @@ export default function CatalogShell({
           </div>
         </div>
 
-        {/* Filter bar */}
+        {/* Filter bar — full inline on desktop; on mobile a single search bar
+            with a filters button that opens a bottom-sheet. */}
+        {isMobile ? (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+              <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", zIndex: 1 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input
+                className="input" type="text" value={localQ}
+                onChange={(e) => setLocalQ(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") updateParam("q", localQ); }}
+                onBlur={() => { if (localQ !== currentQ) updateParam("q", localQ); }}
+                placeholder="Buscar productos, SKU..." style={{ paddingLeft: 36 }}
+              />
+            </div>
+            <button
+              onClick={() => setFiltersOpen(true)}
+              aria-label="Filtros"
+              style={{
+                position: "relative", flexShrink: 0, width: 42, height: 42,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: "var(--radius-input)",
+                border: `1px solid ${activeFilterCount > 0 ? "var(--color-brand)" : "var(--color-border)"}`,
+                background: activeFilterCount > 0 ? "var(--color-brand-light)" : "var(--color-surface)",
+                color: activeFilterCount > 0 ? "var(--color-brand)" : "var(--color-muted)", cursor: "pointer",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+              </svg>
+              {activeFilterCount > 0 && (
+                <span style={{ position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, padding: "0 4px", borderRadius: 999, background: "var(--color-brand)", color: "#fff", fontSize: "0.6875rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontVariantNumeric: "tabular-nums" }}>
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+        ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {/* Row 1: search + collection + sort + clear */}
           <div className="catalog-filter-row1" style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -405,7 +449,7 @@ export default function CatalogShell({
               />
             </div>
 
-            <CollectionFilter categories={categories} tree={categoryTree} state={parseTri(currentCategory)} onCycle={(v) => cycleFilter("category", v)} />
+            <CollectionFilter categories={categories} tree={categoryTree} state={collectionMap} onCycle={(v) => cycleFilter("category", v)} />
 
             <select
               value={currentSort}
@@ -437,7 +481,82 @@ export default function CatalogShell({
             {FLAG_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={flagMap.get(o.v)} onClick={() => cycleFilter("flag", o.v)} />)}
           </div>
         </div>
+        )}
       </div>
+
+      {/* Mobile filters bottom-sheet */}
+      {isMobile && filtersOpen && (
+        <>
+          <div onClick={() => setFiltersOpen(false)} className="anim-in" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.4)", zIndex: 400 }} />
+          <div className="anim-modal" style={{
+            position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 400,
+            background: "var(--color-surface)", borderTopLeftRadius: "var(--radius-modal)", borderTopRightRadius: "var(--radius-modal)",
+            boxShadow: "var(--shadow-float)", maxHeight: "82dvh", display: "flex", flexDirection: "column",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
+              <span style={{ fontSize: "1rem", fontWeight: 600, letterSpacing: "-0.01em" }}>Filtros</span>
+              <button onClick={() => setFiltersOpen(false)} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span style={filterGroupLabel}>Colecciones</span>
+                <CollectionFilter categories={categories} tree={categoryTree} state={collectionMap} onCycle={(v) => cycleFilter("category", v)} />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span style={filterGroupLabel}>Ordenar por</span>
+                <select
+                  value={currentSort}
+                  onChange={(e) => updateParam("sort", e.target.value === "recent" ? "" : e.target.value)}
+                  className="input"
+                >
+                  <option value="recent">Más recientes</option>
+                  <option value="oldest">Más antiguos</option>
+                  <option value="edited">Editados recientemente</option>
+                  <option value="best-selling">Más vendidos</option>
+                  <option value="worst-selling">Menos vendidos</option>
+                  <option value="price-high">Mayor precio</option>
+                  <option value="price-low">Menor precio</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span style={filterGroupLabel}>Estado</span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {STATUS_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={statusMap.get(o.v)} onClick={() => cycleFilter("status", o.v)} />)}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <span style={filterGroupLabel}>Alertas</span>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {FLAG_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={flagMap.get(o.v)} onClick={() => cycleFilter("flag", o.v)} />)}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--color-divider)", flexShrink: 0 }}>
+              {(currentStatus || currentCategory || currentFlag || (currentSort && currentSort !== "recent")) && (
+                <button className="btn-secondary" onClick={() => {
+                  // Clear all filter facets in one push (sequential updateParam calls
+                  // would each start from the same stale params and clobber each other).
+                  const p = new URLSearchParams(searchParams.toString());
+                  ["status", "category", "flag", "sort", "page", "edit"].forEach((k) => p.delete(k));
+                  startTransition(() => router.push(`${pathname}?${p.toString()}`));
+                }} style={{ flex: 1, justifyContent: "center" }}>
+                  Limpiar filtros
+                </button>
+              )}
+              <button className="btn-primary" onClick={() => setFiltersOpen(false)} style={{ flex: 1, justifyContent: "center" }}>
+                Ver resultados
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Body */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
