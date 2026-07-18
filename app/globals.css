@@ -27,17 +27,27 @@
   --color-border:      #E5E7EB;
   --color-divider:     #F3F4F6;
 
-  /* Semantic — the base token is the TEXT/border/icon tone: it clears 4.5:1 both
-     on --color-surface and on its own -bg, and carries white text when used as a
-     filled badge. The -bg tones are unchanged. */
-  --color-success:     #047857;
-  --color-success-bg:  #ECFDF5;
-  --color-warning:     #B45309;
-  --color-warning-bg:  #FFFBEB;
-  --color-danger:      #B91C1C;
-  --color-danger-bg:   #FEF2F2;
-  --color-info:        #1D4ED8;
-  --color-info-bg:     #EFF6FF;
+  /* Semantic — two tiers, because text and icons have different contrast floors.
+     Each tone is the MOST saturated colour (max OKLCH chroma, in gamut) that still
+     clears its floor on --color-surface and on its own -bg. Forcing everything to
+     the 4.5:1 text floor is what made the states read as one muddy colour.
+
+       --color-X      TEXT + filled badges → 4.5:1 (WCAG 1.4.3)
+       --color-X-icon icons, borders, dots → 3:1   (WCAG 1.4.11)
+
+     Hues are held apart on purpose so the states stay tellable at a glance in a
+     dense table: success 145°, warning 50°, danger 27°. */
+  --color-success:      #018522;   /* oklch .555 .168 145 — 4.8:1 */
+  --color-success-bg:   #ECFDF5;
+  --color-success-icon: #07A72E;   /* oklch .655 .198 145 — 3.2:1 */
+  --color-warning:      #BA5702;   /* oklch .575 .150 50  — 4.7:1 */
+  --color-warning-bg:   #FFFBEB;
+  --color-warning-icon: #EA6E02;   /* oklch .680 .178 50  — 3.1:1 */
+  --color-danger:       #E20119;   /* oklch .575 .234 27  — 4.9:1 */
+  --color-danger-bg:    #FEF2F2;
+  --color-danger-icon:  #FE0A20;   /* oklch .630 .254 27  — 4.0:1 */
+  --color-info:         #026FD7;   /* oklch .550 .180 255 — 4.9:1 */
+  --color-info-bg:      #EFF6FF;
 
   /* Radii */
   --radius-card:    20px;

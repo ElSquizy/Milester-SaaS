@@ -377,7 +377,7 @@ function PriceField({ id, field, value, base }: {
   const activePromo = isPromo && value != null && value < base;
   const color = !isPromo
     ? "var(--color-muted)"                                    // base — gray
-    : value == null ? "var(--color-faint)"                    // no promo
+    : value == null ? "var(--color-subtle)"                   // no promo
     : activePromo ? "var(--color-success)"                    // applies
     : "var(--color-warning)";                                 // set but ≥ base
 
@@ -425,7 +425,7 @@ function IconChip({ color, bg, title, spin, children }: {
 
 function VisibilityIcon({ published }: { published: boolean }) {
   return published ? (
-    <IconChip color="var(--color-success)" bg="var(--color-success-bg)" title="Publicado">
+    <IconChip color="var(--color-success-icon)" bg="var(--color-success-bg)" title="Publicado">
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
     </IconChip>
   ) : (
@@ -438,14 +438,14 @@ function VisibilityIcon({ published }: { published: boolean }) {
 function SyncIcon({ status, lastSyncedAt }: { status: string; lastSyncedAt: Date | string | null }) {
   if (status === "pending-delete") {
     return (
-      <IconChip color="var(--color-danger)" bg="var(--color-danger-bg, #FEF2F2)" title="Se eliminará al sincronizar">
+      <IconChip color="var(--color-danger-icon)" bg="var(--color-danger-bg, #FEF2F2)" title="Se eliminará al sincronizar">
         <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       </IconChip>
     );
   }
   if (status === "error") {
     return (
-      <IconChip color="var(--color-danger)" bg="var(--color-danger-bg, #FEF2F2)" title="Error al sincronizar">
+      <IconChip color="var(--color-danger-icon)" bg="var(--color-danger-bg, #FEF2F2)" title="Error al sincronizar">
         <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
       </IconChip>
     );
@@ -459,13 +459,13 @@ function SyncIcon({ status, lastSyncedAt }: { status: string; lastSyncedAt: Date
   }
   if (status === "modified" || status === "pending") {
     return (
-      <IconChip color="var(--color-warning)" bg="var(--color-warning-bg)" title="Cambios sin sincronizar">
+      <IconChip color="var(--color-warning-icon)" bg="var(--color-warning-bg)" title="Cambios sin sincronizar">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
       </IconChip>
     );
   }
   return (
-    <IconChip color="var(--color-success)" bg="var(--color-success-bg)" title={lastSyncedAt ? `Sincronizado ${formatDate(lastSyncedAt)}` : "Sincronizado"}>
+    <IconChip color="var(--color-success-icon)" bg="var(--color-success-bg)" title={lastSyncedAt ? `Sincronizado ${formatDate(lastSyncedAt)}` : "Sincronizado"}>
       <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><polyline points="9 15 11 17 15 12" />
     </IconChip>
   );
