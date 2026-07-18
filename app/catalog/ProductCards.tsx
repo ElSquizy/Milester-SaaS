@@ -129,14 +129,15 @@ function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
           {selected ? "✓" : ""}
         </button>
 
-        {/* Discount badge */}
+        {/* Discount badge. The discount is data, not a state — a solid fill here
+            would compete with the attention pills, which now own the saturated
+            treatment, so it stays quiet. */}
         {discountPct > 0 && !del && (
           <span style={{
             position: "absolute", bottom: 12, left: 12,
             padding: "3px 8px", borderRadius: "var(--radius-pill)",
-            background: "var(--color-success)", color: "#fff",
+            background: "rgba(255,255,255,0.92)", color: "var(--color-success)",
             fontSize: "0.75rem", fontWeight: 700, fontVariantNumeric: "tabular-nums",
-            boxShadow: "0 1px 2px rgba(0,0,0,0.12)",
           }}>
             −{discountPct}%
           </span>
@@ -288,17 +289,49 @@ function ProductCard({ product, selected, onToggle, onOpen, onContextMenu }: {
   );
 }
 
+/**
+ * Same rule as the table: colour is reserved for states that need action.
+ *
+ * A labelled green "Sincronizado" pill on every card is noise — almost every card
+ * is synced, so it stops meaning anything and leaves the states that DO matter
+ * nothing to stand out against. The healthy default shrinks to a small unlabelled
+ * check; anything needing attention keeps a full solid, labelled pill.
+ *
+ * Unlike the table, this sits on top of the product image, so even the quiet
+ * marker needs a backing to stay legible over an arbitrary photo.
+ */
 function SyncPill({ status }: { status: string }) {
-  const map: Record<string, { cls: string; label: string; bg?: string; color?: string }> = {
-    "pending-delete": { cls: "pill-danger", label: "Se eliminará" },
-    error:            { cls: "pill-danger", label: "Error" },
-    syncing:          { cls: "pill-info", label: "Sincronizando" },
-    modified:         { cls: "", label: "Modificado", bg: "var(--color-warning)", color: "#fff" },
-    pending:          { cls: "pill-warning", label: "Pendiente" },
-    synced:           { cls: "pill-success", label: "Sincronizado" },
+  const attention: Record<string, { bg: string; label: string }> = {
+    "pending-delete": { bg: "var(--color-danger)",  label: "Se eliminará" },
+    error:            { bg: "var(--color-danger)",  label: "Error" },
+    modified:         { bg: "var(--color-warning)", label: "Modificado" },
+    pending:          { bg: "var(--color-warning)", label: "Pendiente" },
+    syncing:          { bg: "var(--color-brand)",   label: "Sincronizando" },
   };
-  const s = map[status] || { cls: "pill-neutral", label: status };
-  return <span className={`pill ${s.cls}`} style={s.bg ? { background: s.bg, color: s.color } : undefined}>{s.label}</span>;
+  const a = attention[status];
+  if (a) {
+    return (
+      <span className="pill" style={{ background: a.bg, color: "#fff", fontWeight: 600 }}>
+        {a.label}
+      </span>
+    );
+  }
+  return (
+    <span
+      role="img"
+      aria-label="Sincronizado"
+      title="Sincronizado"
+      style={{
+        width: 22, height: 22, borderRadius: "50%", display: "flex",
+        alignItems: "center", justifyContent: "center",
+        background: "rgba(255,255,255,0.92)", color: "var(--color-success-icon)",
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    </span>
+  );
 }
 
 const priceLabel: React.CSSProperties = {
