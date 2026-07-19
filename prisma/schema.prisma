@@ -75,6 +75,7 @@ model Product {
   imageTemplateId Int?                       // ImageTemplate (background + cover frame) applied to the image
   imageTemplate   ImageTemplate? @relation(fields: [imageTemplateId], references: [id], onDelete: SetNull)
   productImageUrl String?                    // raw product-layer image URL, composited under the cover
+  imageDirty     Boolean     @default(false) // local image differs from TN's — upload it on the next push
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 }

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { syncProductToTiendaNube, getTiendaNubeClient } from "@/lib/tiendanube";
 import { tagsToTnString } from "@/lib/categories";
+import { pushProductImage } from "@/lib/productImage";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -60,23 +61,44 @@ export async function syncOneProduct(
     }
   }
 
+  // Images live on their own TN endpoint, so they don't travel with the product
+  // payload above and have to be pushed separately. A freshly created product
+  // (a duplicate) always needs one; an existing one only when the image changed.
+  const wasCreate = !product.tiendaNubeId && !!tnResult?.id;
+  const needsImage = product.imageDirty || (wasCreate && !!(product.productImageUrl || product.imageUrl));
+
   // Keep the local base variant consistent with what we just pushed.
   const first = product.variants[0];
   if (first && (first.price !== product.price || first.promotionalPrice !== product.promotionalPrice)) {
     await prisma.variant.update({ where: { id: first.id }, data: { price: product.price, promotionalPrice: product.promotionalPrice } });
   }
 
+  // Sequential rather than a $transaction: these are two idempotent bookkeeping
+  // writes, and wrapping them made the whole sync fail on Turso ("unable to start
+  // a transaction in the given time") whenever the push ran long — which it does
+  // as soon as Tienda Nube rate-limits us and the client backs off.
   const now = new Date();
-  await prisma.$transaction([
-    prisma.product.update({
-      where: { id: productId },
-      data: { syncStatus: "synced", lastSyncedAt: now },
-    }),
-    prisma.changelog.updateMany({
-      where: { productId, synced: false },
-      data: { synced: true, syncedAt: now },
-    }),
-  ]);
+  await prisma.product.update({
+    where: { id: productId },
+    data: { syncStatus: "synced", lastSyncedAt: now },
+  });
+  await prisma.changelog.updateMany({
+    where: { productId, synced: false },
+    data: { synced: true, syncedAt: now },
+  });
+
+  // Image last: it's the slowest step by far, so it must never put the record of
+  // a successful field sync at risk. If it fails the product goes to "error",
+  // which keeps it in the retry queue instead of quietly leaving Tienda Nube
+  // showing the wrong picture.
+  if (needsImage) {
+    try {
+      await pushProductImage(productId, settings);
+    } catch (err) {
+      await prisma.product.update({ where: { id: productId }, data: { syncStatus: "error" } });
+      throw err;
+    }
+  }
 }
 
 /**

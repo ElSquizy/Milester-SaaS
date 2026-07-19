@@ -51,7 +51,14 @@ export async function duplicateProduct(sourceId: number, creds?: { storeId: stri
       originalPrice: src.originalPrice,
       seoTitle: src.seoTitle,
       seoDescription: src.seoDescription,
+      // The copy shows the same picture right away, but that URL points at the
+      // SOURCE's image on TN. imageDirty makes the next push upload the copy its
+      // own image and overwrite imageUrl with it — otherwise the product would be
+      // created in TN with no image while the app kept showing the original's.
       imageUrl: src.imageUrl,
+      productImageUrl: src.productImageUrl,
+      imageTemplateId: src.imageTemplateId,
+      imageDirty: !!(src.productImageUrl || src.imageUrl),
       categoryId: src.categoryId,
       categoryName: src.categoryName,
       stock: src.stock,
@@ -166,6 +173,14 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
   }
 
   const syncNow = body.sync === true;
+  // Any of the three image fields means TN's copy is now out of date. It counts as
+  // a real change so the product joins the push queue and the image travels with it.
+  const imageChanged =
+    (imageUrl !== undefined && existing.imageUrl !== imageUrl) ||
+    (productImageUrl !== undefined && existing.productImageUrl !== (productImageUrl || null)) ||
+    (imageTemplateId !== undefined && existing.imageTemplateId !== (imageTemplateId === null ? null : Number(imageTemplateId)));
+  if (imageChanged) changes.push({ field: "imagen", oldValue: null, newValue: null });
+
   const hasChanges = changes.length > 0;
 
   let product = await prisma.product.update({
@@ -187,6 +202,7 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
       ...(imageUrl !== undefined ? { imageUrl } : {}),
       ...(published !== undefined ? { published } : {}),
       ...(tags !== undefined ? { tags } : {}),
+      ...(imageChanged ? { imageDirty: true } : {}),
       ...(hasChanges && !syncNow ? { syncStatus: "modified" } : {}),
     },
     include: { variants: true, promotion: true },
