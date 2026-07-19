@@ -159,7 +159,9 @@ model CampaignItem {
 
 model Order {
   id            Int         @id @default(autoincrement())
-  tiendaNubeId  String      @unique
+  // Null while the order only exists here: a manual ticket taken over WhatsApp
+  // has no Tienda Nube id until (and unless) it is pushed there.
+  tiendaNubeId  String?     @unique
   number        Int?
   total         Float
   status        String      // open | closed | cancelled
@@ -169,6 +171,12 @@ model Order {
   customer      Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   source        String      @default("tiendanube") // tiendanube | local
   orderedAt     DateTime    // Tienda Nube created_at
+
+  // Manual ticket ("pedido de bar") fields — only meaningful when source = "local".
+  fulfillmentState String?  // pending_payment | paid | delivered
+  paymentReference String?  // transfer / MercadoPago operation number
+  exchangeRate     Float?   // ARS per USD at sale time; snapshot so past margins stay honest
+  linkedOrderId    Int?     // the web order this ticket corresponds to, so the sale isn't counted twice
 
   // Financial
   subtotal       Float?
@@ -239,6 +247,7 @@ model OrderItem {
   imageUrl    String?
   quantity    Int
   price       Float
+  costUsd     Float?   // snapshot of the product's USD cost at sale time, for real margin
 }
 
 model Changelog {

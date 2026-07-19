@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import Countdown from "./Countdown";
+import OrderTickets from "./OrderTickets";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +144,9 @@ export default async function HomePage() {
             {total.toLocaleString("es-AR")} productos
           </span>
         </div>
+
+        {/* Pending manual orders — the working surface, above the read-only dashboard */}
+        <OrderTickets />
 
         {/* KPIs — mes en curso vs mes anterior */}
         {hasSales && (
