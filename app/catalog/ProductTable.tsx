@@ -48,6 +48,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
           <th style={{ ...th, width: 48 }} />
           <th style={{ ...th, textAlign: "left", minWidth: 200 }}>Nombre</th>
           <th style={{ ...th, textAlign: "left", minWidth: 140 }}>Categoría</th>
+          <th style={{ ...th, textAlign: "right", minWidth: 96 }} title="Costo del producto en dólares. Es un dato tuyo: no se envía a Tienda Nube.">Costo USD</th>
           <th style={{ ...th, textAlign: "right", minWidth: 110 }}>Precio base</th>
           <th style={{ ...th, textAlign: "right", minWidth: 120 }}>Precio promocional</th>
           <th style={{ ...th, textAlign: "right", minWidth: 70 }}>Stock</th>
@@ -115,6 +116,11 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                 <CategoryCell productId={p.id} current={p.categoryLinks} />
               </td>
 
+              {/* Cost in USD — local-only, never pushed to TN */}
+              <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                <CostUsdField id={p.id} value={p.costUsd} />
+              </td>
+
               {/* Base price — inline editable, gray */}
               <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                 <PriceField id={p.id} field="price" value={p.price} base={p.price} />
@@ -170,7 +176,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
             </tr>
             {isExpanded && (
               <tr>
-                <td colSpan={9} style={{ padding: 0, background: "var(--color-surface-2)", borderTop: "1px solid var(--color-divider)" }}>
+                <td colSpan={10} style={{ padding: 0, background: "var(--color-surface-2)", borderTop: "1px solid var(--color-divider)" }}>
                   <VariantRows productId={p.id} />
                 </td>
               </tr>
@@ -416,6 +422,62 @@ function PriceField({ id, field, value, base }: {
  *  "solid" — needs attention (modified, error, will-be-deleted). Saturated fill,
  *            white glyph, so a single one of these is unmissable in a long list.
  */
+/**
+ * What the product cost in USD. Local bookkeeping — Tienda Nube has no field for
+ * it, so editing it neither syncs nor marks the product dirty. Empty means "this
+ * one isn't priced in dollars", which is most of the catalog's exceptions.
+ */
+function CostUsdField({ id, value }: { id: number; value: number | null }) {
+  const refresh = useDeferredRefresh();
+  const [raw, setRaw] = useState(value != null ? String(value) : "");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setRaw(value != null ? String(value) : ""); }, [value]);
+
+  async function commit(dom: string) {
+    const t = dom.trim().replace(/[^\d.,-]/g, "").replace(",", ".");
+    const v = t === "" ? null : parseFloat(t);
+    if (t !== "" && (v == null || isNaN(v))) { setRaw(value != null ? String(value) : ""); return; }
+    if ((v ?? null) === (value ?? null)) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ costUsd: v }),
+      });
+      if (res.ok) refresh();
+    } finally { setBusy(false); }
+  }
+
+  const empty = raw.trim() === "";
+  return (
+    <span style={{ position: "relative", display: "inline-block" }} onKeyDown={(e) => e.stopPropagation()}>
+      <span style={{
+        position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)",
+        fontSize: "0.8125rem", pointerEvents: "none",
+        color: empty ? "var(--color-faint)" : "var(--color-muted)",
+      }}>US$</span>
+      <input
+        value={raw}
+        placeholder="—"
+        onChange={(e) => setRaw(e.target.value)}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "var(--color-border)"; e.currentTarget.style.background = "var(--color-surface)"; }}
+        onBlur={(e) => { const v = e.target.value; e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.background = "transparent"; commit(v); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        disabled={busy}
+        inputMode="decimal"
+        aria-label="Costo en dólares"
+        title="Costo en dólares — dato local, no se envía a Tienda Nube"
+        style={{
+          border: "1px solid transparent", background: "transparent",
+          textAlign: "right", fontVariantNumeric: "tabular-nums", width: 92,
+          padding: "3px 6px 3px 34px", borderRadius: 7, cursor: "text",
+          color: empty ? "var(--color-subtle)" : "var(--color-ink)", fontWeight: empty ? 400 : 600,
+        }}
+      />
+    </span>
+  );
+}
+
 function IconChip({ color, title, tone = "quiet", spin, children }: {
   color: string; title: string; tone?: "quiet" | "solid"; spin?: boolean; children: React.ReactNode;
 }) {

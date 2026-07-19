@@ -76,6 +76,10 @@ model Product {
   imageTemplate   ImageTemplate? @relation(fields: [imageTemplateId], references: [id], onDelete: SetNull)
   productImageUrl String?                    // raw product-layer image URL, composited under the cover
   imageDirty     Boolean     @default(false) // local image differs from TN's — upload it on the next push
+  // What the product cost in USD. Local-only: Tienda Nube has no field for it, so
+  // it never syncs and never marks the product dirty. Optional — most of the
+  // catalog is priced in USD, but not all of it.
+  costUsd        Float?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 }

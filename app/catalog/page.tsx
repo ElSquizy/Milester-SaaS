@@ -95,6 +95,7 @@ export default async function CatalogPage({
         categoryName: true,
         price: true,
         promotionalPrice: true,
+        costUsd: true,
         stock: true,
         infiniteStock: true,
         published: true,
@@ -173,6 +174,7 @@ export type CatalogProduct = {
   categoryLinks: { id: number; name: string }[];
   price: number;
   promotionalPrice: number | null;
+  costUsd: number | null;
   stock: number | null;
   infiniteStock: boolean;
   variantCount: number;

@@ -1,6 +1,5 @@
 "use client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { useState, useCallback, useTransition, useEffect, useRef } from "react";
 import type { CatalogProduct } from "./page";
 import ProductTable from "./ProductTable";
@@ -26,6 +25,7 @@ type EditProduct = {
   price: number;
   promotionalPrice: number | null;
   originalPrice: number;
+  costUsd: number | null;
   sku: string | null;
   published: boolean;
   tags: string;
@@ -83,6 +83,16 @@ const FLAG_OPTS = [
   { v: "no-stock", label: "Sin stock" },
   { v: "no-sku", label: "Sin SKU" },
   { v: "stale", label: "Sin vender 60d" },
+];
+
+const SORT_OPTS = [
+  { v: "recent", label: "Más recientes" },
+  { v: "oldest", label: "Más antiguos" },
+  { v: "edited", label: "Editados recientemente" },
+  { v: "best-selling", label: "Más vendidos" },
+  { v: "worst-selling", label: "Menos vendidos" },
+  { v: "price-high", label: "Mayor precio" },
+  { v: "price-low", label: "Menor precio" },
 ];
 
 const filterGroupLabel: React.CSSProperties = {
@@ -268,8 +278,33 @@ export default function CatalogShell({
   const statusMap = parseTri(currentStatus);
   const flagMap = parseTri(currentFlag);
   const collectionMap = parseTri(currentCategory);
-  // How many filter facets are active (for the mobile filters button badge).
   const activeFilterCount = statusMap.size + flagMap.size + collectionMap.size + (currentSort && currentSort !== "recent" ? 1 : 0);
+
+  // Turning a facet off from the summary row.
+  const removeTri = useCallback((param: string, value: string) => {
+    const m = parseTri(searchParams.get(param) || "");
+    m.delete(value);
+    updateParam(param, serializeTri(m));
+  }, [searchParams, updateParam]);
+
+  const clearFilters = useCallback(() => {
+    // One push: sequential updateParam calls would each start from the same stale
+    // params and clobber each other.
+    const p = new URLSearchParams(searchParams.toString());
+    ["status", "category", "flag", "sort", "page", "edit"].forEach((k) => p.delete(k));
+    startTransition(() => router.push(`${pathname}?${p.toString()}`));
+  }, [searchParams, pathname, router]);
+
+  // What's applied right now, shown as removable chips so the filter state is
+  // readable without opening the panel.
+  const activeFilters: { id: string; label: string; remove: () => void }[] = [
+    ...[...statusMap].map(([v, st]) => ({ id: `status:${v}`, label: (st === "exc" ? "Sin " : "") + (STATUS_OPTS.find((o) => o.v === v)?.label ?? v), remove: () => removeTri("status", v) })),
+    ...[...flagMap].map(([v, st]) => ({ id: `flag:${v}`, label: (st === "exc" ? "No " : "") + (FLAG_OPTS.find((o) => o.v === v)?.label ?? v), remove: () => removeTri("flag", v) })),
+    ...[...collectionMap].map(([v, st]) => ({ id: `cat:${v}`, label: (st === "exc" ? "Sin " : "") + v, remove: () => removeTri("category", v) })),
+    ...(currentSort && currentSort !== "recent"
+      ? [{ id: "sort", label: SORT_OPTS.find((o) => o.v === currentSort)?.label ?? currentSort, remove: () => updateParam("sort", "") }]
+      : []),
+  ];
   const cycleFilter = useCallback((param: string, value: string) => {
     const m = parseTri(searchParams.get(param) || "");
     const cur = m.get(value);
@@ -278,6 +313,41 @@ export default function CatalogShell({
     else m.delete(value);
     updateParam(param, serializeTri(m));
   }, [searchParams, updateParam]);
+
+  // One definition, rendered inside the desktop dropdown and the mobile sheet.
+  const filterControls = (
+    <>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span style={filterGroupLabel}>Colecciones</span>
+        <CollectionFilter categories={categories} tree={categoryTree} state={collectionMap} onCycle={(v) => cycleFilter("category", v)} />
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span style={filterGroupLabel}>Ordenar por</span>
+        <select
+          value={currentSort}
+          onChange={(e) => updateParam("sort", e.target.value === "recent" ? "" : e.target.value)}
+          className="input"
+        >
+          {SORT_OPTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+        </select>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span style={filterGroupLabel}>Estado</span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {STATUS_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={statusMap.get(o.v)} onClick={() => cycleFilter("status", o.v)} />)}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <span style={filterGroupLabel}>Alertas</span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {FLAG_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={flagMap.get(o.v)} onClick={() => cycleFilter("flag", o.v)} />)}
+        </div>
+      </div>
+    </>
+  );
 
   function openEdit(id: number) {
     const p = new URLSearchParams(searchParams.toString());
@@ -368,10 +438,6 @@ export default function CatalogShell({
                 )}
               </div>
             )}
-            <Link href="/catalog/templates" className="btn-secondary" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.8125rem" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
-              Plantillas
-            </Link>
             {/* View toggle — hidden on mobile, where cards are forced */}
             <div style={{ display: isMobile ? "none" : "flex", background: "var(--color-surface-2)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-control)", padding: 3 }}>
               {([
@@ -398,51 +464,13 @@ export default function CatalogShell({
           </div>
         </div>
 
-        {/* Filter bar — full inline on desktop; on mobile a single search bar
-            with a filters button that opens a bottom-sheet. */}
-        {isMobile ? (
+        {/* Filter bar — one model on every screen: search + Filtros. Desktop used
+            to inline every control plus two rows of chips, which made the two
+            layouts diverge and ate the top of the page. The panel is the same
+            content in both; only its container differs. */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-              <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", zIndex: 1 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2" strokeLinecap="round">
-                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-              </span>
-              <input
-                className="input" type="text" value={localQ}
-                onChange={(e) => setLocalQ(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") updateParam("q", localQ); }}
-                onBlur={() => { if (localQ !== currentQ) updateParam("q", localQ); }}
-                placeholder="Buscar productos, SKU..." style={{ paddingLeft: 36 }}
-              />
-            </div>
-            <button
-              onClick={() => setFiltersOpen(true)}
-              aria-label="Filtros"
-              style={{
-                position: "relative", flexShrink: 0, width: 42, height: 42,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                borderRadius: "var(--radius-input)",
-                border: `1px solid ${activeFilterCount > 0 ? "var(--color-brand)" : "var(--color-border)"}`,
-                background: activeFilterCount > 0 ? "var(--color-brand-light)" : "var(--color-surface)",
-                color: activeFilterCount > 0 ? "var(--color-brand)" : "var(--color-muted)", cursor: "pointer",
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-              </svg>
-              {activeFilterCount > 0 && (
-                <span style={{ position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, padding: "0 4px", borderRadius: 999, background: "var(--color-brand)", color: "#fff", fontSize: "0.6875rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontVariantNumeric: "tabular-nums" }}>
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-          </div>
-        ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {/* Row 1: search + collection + sort + clear */}
-          <div className="catalog-filter-row1" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div className="catalog-search" style={{ position: "relative", flex: 1, maxWidth: 340 }}>
+            <div style={{ position: "relative", flex: 1, minWidth: 0, maxWidth: isMobile ? undefined : 420 }}>
               <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", zIndex: 1 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2" strokeLinecap="round">
                   <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -457,42 +485,73 @@ export default function CatalogShell({
               />
             </div>
 
-            <CollectionFilter categories={categories} tree={categoryTree} state={collectionMap} onCycle={(v) => cycleFilter("category", v)} />
-
-            <select
-              value={currentSort}
-              onChange={(e) => updateParam("sort", e.target.value === "recent" ? "" : e.target.value)}
-              className="input catalog-sort" style={{ width: "auto", marginLeft: "auto" }}
-            >
-              <option value="recent">Más recientes</option>
-              <option value="oldest">Más antiguos</option>
-              <option value="edited">Editados recientemente</option>
-              <option value="best-selling">Más vendidos</option>
-              <option value="worst-selling">Menos vendidos</option>
-              <option value="price-high">Mayor precio</option>
-              <option value="price-low">Menor precio</option>
-            </select>
-
-            {(currentQ || currentStatus || currentCategory || currentFlag) && (
-              <button className="btn-secondary" onClick={() => { setLocalQ(""); router.push(pathname); }} style={{ padding: "8px 14px", fontSize: "0.8125rem", whiteSpace: "nowrap" }}>
-                Limpiar
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <button
+                onClick={() => setFiltersOpen((o) => !o)}
+                aria-label="Filtros"
+                aria-expanded={filtersOpen}
+                title="Filtros"
+                style={{
+                  position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  height: 42, padding: isMobile ? 0 : "0 14px", width: isMobile ? 42 : undefined,
+                  borderRadius: "var(--radius-input)",
+                  border: `1px solid ${activeFilterCount > 0 ? "var(--color-brand)" : "var(--color-border)"}`,
+                  background: activeFilterCount > 0 ? "var(--color-brand-light)" : "var(--color-surface)",
+                  color: activeFilterCount > 0 ? "var(--color-brand)" : "var(--color-muted)",
+                  cursor: "pointer", fontSize: "0.875rem", fontWeight: 500, whiteSpace: "nowrap",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                </svg>
+                {!isMobile && "Filtros"}
+                {activeFilterCount > 0 && (
+                  <span style={{ position: isMobile ? "absolute" : "static", top: -6, right: -6, minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "var(--color-brand)", color: "#fff", fontSize: "0.6875rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", fontVariantNumeric: "tabular-nums" }}>
+                    {activeFilterCount}
+                  </span>
+                )}
               </button>
-            )}
+
+              {/* Desktop: dropdown anchored to the button. Mobile gets the sheet below. */}
+              {!isMobile && filtersOpen && (
+                <>
+                  <div onClick={() => setFiltersOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 69 }} />
+                  <div className="anim-in menu" style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 70, width: 380, padding: 0, display: "flex", flexDirection: "column", maxHeight: "70vh" }}>
+                    <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 18 }}>
+                      {filterControls}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid var(--color-divider)" }}>
+                      {activeFilterCount > 0 && (
+                        <button className="btn-secondary" onClick={clearFilters} style={{ flex: 1, justifyContent: "center", fontSize: "0.8125rem" }}>Limpiar</button>
+                      )}
+                      <button className="btn-primary" onClick={() => setFiltersOpen(false)} style={{ flex: 1, justifyContent: "center", fontSize: "0.8125rem" }}>Ver resultados</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
-          {/* Row 2: tri-state chips (click: incluir → excluir → apagado) */}
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={filterGroupLabel}>Estado</span>
-            {STATUS_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={statusMap.get(o.v)} onClick={() => cycleFilter("status", o.v)} />)}
-            <span style={{ width: 1, height: 18, background: "var(--color-border)", margin: "0 4px" }} />
-            <span style={filterGroupLabel}>Alertas</span>
-            {FLAG_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={flagMap.get(o.v)} onClick={() => cycleFilter("flag", o.v)} />)}
-          </div>
+          {/* What's applied, removable one by one — readable without opening the panel */}
+          {activeFilters.length > 0 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+              {activeFilters.map((f) => (
+                <span key={f.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 6px 4px 10px", borderRadius: "var(--radius-pill)", background: "var(--color-brand-light)", color: "var(--color-brand)", fontSize: "0.75rem", fontWeight: 600, maxWidth: 240 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.label}</span>
+                  <button onClick={f.remove} aria-label={`Quitar filtro ${f.label}`} style={{ border: "none", background: "transparent", cursor: "pointer", color: "inherit", padding: 0, width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                  </button>
+                </span>
+              ))}
+              <button onClick={clearFilters} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", fontSize: "0.75rem", fontWeight: 500, textDecoration: "underline", padding: "4px 6px" }}>
+                Limpiar todo
+              </button>
+            </div>
+          )}
         </div>
-        )}
       </div>
 
-      {/* Mobile filters bottom-sheet */}
+      {/* Mobile: the same controls as a bottom-sheet */}
       {isMobile && filtersOpen && (
         <>
           <div onClick={() => setFiltersOpen(false)} className="anim-in" style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.4)", zIndex: 400 }} />
@@ -509,58 +568,14 @@ export default function CatalogShell({
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={filterGroupLabel}>Colecciones</span>
-                <CollectionFilter categories={categories} tree={categoryTree} state={collectionMap} onCycle={(v) => cycleFilter("category", v)} />
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={filterGroupLabel}>Ordenar por</span>
-                <select
-                  value={currentSort}
-                  onChange={(e) => updateParam("sort", e.target.value === "recent" ? "" : e.target.value)}
-                  className="input"
-                >
-                  <option value="recent">Más recientes</option>
-                  <option value="oldest">Más antiguos</option>
-                  <option value="edited">Editados recientemente</option>
-                  <option value="best-selling">Más vendidos</option>
-                  <option value="worst-selling">Menos vendidos</option>
-                  <option value="price-high">Mayor precio</option>
-                  <option value="price-low">Menor precio</option>
-                </select>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={filterGroupLabel}>Estado</span>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {STATUS_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={statusMap.get(o.v)} onClick={() => cycleFilter("status", o.v)} />)}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <span style={filterGroupLabel}>Alertas</span>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {FLAG_OPTS.map((o) => <FilterChip key={o.v} label={o.label} state={flagMap.get(o.v)} onClick={() => cycleFilter("flag", o.v)} />)}
-                </div>
-              </div>
+              {filterControls}
             </div>
 
             <div style={{ display: "flex", gap: 10, padding: "14px 20px", borderTop: "1px solid var(--color-divider)", flexShrink: 0 }}>
-              {(currentStatus || currentCategory || currentFlag || (currentSort && currentSort !== "recent")) && (
-                <button className="btn-secondary" onClick={() => {
-                  // Clear all filter facets in one push (sequential updateParam calls
-                  // would each start from the same stale params and clobber each other).
-                  const p = new URLSearchParams(searchParams.toString());
-                  ["status", "category", "flag", "sort", "page", "edit"].forEach((k) => p.delete(k));
-                  startTransition(() => router.push(`${pathname}?${p.toString()}`));
-                }} style={{ flex: 1, justifyContent: "center" }}>
-                  Limpiar filtros
-                </button>
+              {activeFilterCount > 0 && (
+                <button className="btn-secondary" onClick={clearFilters} style={{ flex: 1, justifyContent: "center" }}>Limpiar filtros</button>
               )}
-              <button className="btn-primary" onClick={() => setFiltersOpen(false)} style={{ flex: 1, justifyContent: "center" }}>
-                Ver resultados
-              </button>
+              <button className="btn-primary" onClick={() => setFiltersOpen(false)} style={{ flex: 1, justifyContent: "center" }}>Ver resultados</button>
             </div>
           </div>
         </>

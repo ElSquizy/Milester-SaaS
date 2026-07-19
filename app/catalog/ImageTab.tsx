@@ -84,7 +84,7 @@ export default function ImageTab({
           </select>
           {imageTemplates.length === 0 && (
             <p style={{ marginTop: 6, fontSize: "0.75rem", color: "var(--color-subtle)" }}>
-              No hay plantillas de imagen. Creá una en <a href="/catalog/templates" style={{ color: "var(--color-brand)" }}>Plantillas → Imágenes</a>.
+              No hay plantillas de imagen. Creá una en <a href="/templates" style={{ color: "var(--color-brand)" }}>Plantillas → Imágenes</a>.
             </p>
           )}
         </div>

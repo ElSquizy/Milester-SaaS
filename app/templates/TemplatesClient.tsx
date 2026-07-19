@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { renderTemplate, sampleData, parseFields } from "@/lib/descriptionTemplates";
-import ImageComposer from "../ImageComposer";
+import ImageComposer from "../catalog/ImageComposer";
 
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };

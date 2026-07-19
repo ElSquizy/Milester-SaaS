@@ -18,6 +18,7 @@ type Product = {
   price: number;
   promotionalPrice: number | null;
   originalPrice: number;
+  costUsd: number | null;
   sku: string | null;
   published: boolean;
   tags: string;
@@ -50,6 +51,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
   const [price, setPrice] = useState(String(product.price));
   const [promo, setPromo] = useState(product.promotionalPrice != null ? String(product.promotionalPrice) : "");
   const [sku, setSku] = useState(product.sku || "");
+  const [costUsd, setCostUsd] = useState(product.costUsd == null ? "" : String(product.costUsd));
   const [published, setPublished] = useState(product.published);
   const [infiniteStock, setInfiniteStock] = useState(product.infiniteStock);
   const [stock, setStock] = useState(product.stock == null ? "" : String(product.stock));
@@ -69,6 +71,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
   const parsedPromo = promo.trim() === "" ? null : parseFloat(promo.replace(/\./g, "").replace(",", "."));
   const parsedStock = stock.trim() === "" ? null : Math.max(0, Math.round(Number(stock)));
   const normSku = sku.trim() || null;
+  const parsedCost = costUsd.trim() === "" ? null : parseFloat(costUsd.replace(",", "."));
   const parsedTags = tagInput.split(",").map((t) => t.trim()).filter(Boolean);
 
   // TN only accepts unlimited stock at CREATE time; on an existing product the
@@ -93,6 +96,8 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
     diffs.push({ label: "Stock", from: stockLabel(product.infiniteStock, product.stock), to: stockLabel(infiniteStock, parsedStock) });
   if (normSku !== (product.sku || null))
     diffs.push({ label: "SKU", from: product.sku || "—", to: normSku || "—" });
+  if (!isNaN(parsedCost as number) && (parsedCost ?? null) !== (product.costUsd ?? null))
+    diffs.push({ label: "Costo USD", from: product.costUsd != null ? `US$${product.costUsd}` : "—", to: parsedCost != null ? `US$${parsedCost}` : "—" });
   if (published !== product.published)
     diffs.push({ label: "Visibilidad", from: product.published ? "Publicado" : "Oculto", to: published ? "Publicado" : "Oculto" });
   const addedTags = parsedTags.filter((t) => !originalTags.includes(t));
@@ -125,6 +130,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name, price: parsedPrice, promotionalPrice: parsedPromo, sku: normSku, published,
+          costUsd: isNaN(parsedCost as number) ? undefined : parsedCost,
           ...(singleVariant ? { infiniteStock, stock: infiniteStock ? null : parsedStock } : {}),
           tags: JSON.stringify(parsedTags), categoryIds: [...catIds], sync,
         }),
@@ -303,11 +309,20 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
             </Field>
 
-            {/* SKU */}
-            <Field label="SKU" hint="Código interno">
-              <input type="text" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Ej: PS5-DIG-0601"
-                style={{ ...inputStyle, fontFamily: "var(--font-mono), monospace" }} />
-            </Field>
+            {/* SKU + cost in USD */}
+            <div style={{ display: "flex", gap: 12 }}>
+              <Field label="SKU" hint="Código interno">
+                <input type="text" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Ej: PS5-DIG-0601"
+                  style={{ ...inputStyle, fontFamily: "var(--font-mono), monospace" }} />
+              </Field>
+              <Field label="Costo USD" hint="no va a TN">
+                <div style={{ position: "relative" }}>
+                  <span style={{ ...dollarStyle, color: costUsd.trim() === "" ? "var(--color-faint)" : "var(--color-muted)" }}>US$</span>
+                  <input type="text" inputMode="decimal" value={costUsd} onChange={(e) => setCostUsd(e.target.value)} placeholder="—"
+                    style={{ ...inputStyle, paddingLeft: 40, fontVariantNumeric: "tabular-nums" }} />
+                </div>
+              </Field>
+            </div>
 
             {/* Tags */}
             <Field label="Etiquetas" hint="Separadas por coma">

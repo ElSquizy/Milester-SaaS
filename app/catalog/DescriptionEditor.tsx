@@ -74,7 +74,7 @@ export default function DescriptionEditor({ templates, mode, setMode, html, setH
         <textarea className="input" value={html} onChange={(e) => setHtml(e.target.value)} rows={7} style={{ resize: "vertical", lineHeight: 1.6, fontFamily: "inherit" }} placeholder="Descripción del producto (acepta HTML)" />
       ) : templates.length === 0 ? (
         <div style={{ padding: "14px", fontSize: "0.8125rem", color: "var(--color-subtle)", border: "1px dashed var(--color-border)", borderRadius: "var(--radius-input)" }}>
-          No hay plantillas todavía. Creá una en <a href="/catalog/templates" style={{ color: "var(--color-brand)" }}>Catálogo → Plantillas</a>.
+          No hay plantillas todavía. Creá una en <a href="/templates" style={{ color: "var(--color-brand)" }}>Plantillas</a>.
         </div>
       ) : !tmpl ? (
         <div style={{ padding: "14px", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Elegí una plantilla para completar sus campos.</div>
