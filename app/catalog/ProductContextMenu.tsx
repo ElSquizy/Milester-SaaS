@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { isInFocus, toggleFocus } from "./useFocus";
+import { notifyPendingChanged } from "@/lib/pendingEvent";
 
 export type MenuTarget = { id: number; name: string; pendingDelete: boolean; syncStatus: string; x: number; y: number };
 
@@ -50,6 +51,7 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
     try {
       const res = await fn();
       if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Error"); }
+      notifyPendingChanged();
       onDone();
     } finally {
       setBusy(null);

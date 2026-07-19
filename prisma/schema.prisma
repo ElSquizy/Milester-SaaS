@@ -59,7 +59,6 @@ model Product {
   published      Boolean   @default(true)
   tags           String    @default("[]")
   variants       Variant[]
-  promotion      Promotion?
   changelog      Changelog[]
   syncStatus     String      @default("pending")
   pendingDelete  Boolean     @default(false)  // staged for deletion; removed from TN + local on next sync
@@ -82,6 +81,12 @@ model Product {
   costUsd        Float?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
+
+  // The sidebar's pending-push counters filter on these constantly; without the
+  // indexes each count was a full scan of the table (the main driver of the
+  // Turso read-quota blowout).
+  @@index([syncStatus])
+  @@index([pendingDelete])
 }
 
 model DescriptionTemplate {
@@ -297,16 +302,3 @@ model AiTemplate {
   updatedAt  DateTime    @updatedAt
 }
 
-model Promotion {
-  id          Int      @id @default(autoincrement())
-  productId   Int      @unique
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  promoPrice  Float
-  startDate   DateTime
-  endDate     DateTime
-  active      Boolean  @default(false)
-  appliedAt   DateTime?
-  revertedAt  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}

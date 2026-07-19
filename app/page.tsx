@@ -27,15 +27,24 @@ export default async function HomePage() {
   const now = new Date();
   const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const startLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const [total, modified, errors, noImage, noCategory, noStock, stale, ordersCount, activeCampaigns, upcomingCampaigns, recentActivity, mtd, lastMonthAgg] = await Promise.all([
-    prisma.product.count(),
-    prisma.product.count({ where: { syncStatus: "modified" } }),
-    prisma.product.count({ where: { syncStatus: "error" } }),
-    prisma.product.count({ where: { imageUrl: null } }),
-    prisma.product.count({ where: { categoryName: null } }),
-    prisma.product.count({ where: { stock: { lte: 0 }, infiniteStock: false } }),
-    // Dead stock: in stock but no sale in 60 days (only meaningful once orders are imported)
-    prisma.product.count({ where: { OR: [{ stock: { gt: 0 } }, { infiniteStock: true }], AND: { OR: [{ lastSoldAt: null }, { lastSoldAt: { lt: staleDate } }] } } }),
+  // All seven product tallies in ONE pass over the table. As separate counts
+  // this page scanned Product seven times per load — with force-dynamic and the
+  // pull-on-navigation pattern, that was a major driver of the Turso read quota.
+  // DateTimes are stored as ISO text with a +00:00 suffix, so the boundary is
+  // bound in that exact format for a correct lexicographic comparison.
+  const staleIso = staleDate.toISOString().replace("Z", "+00:00");
+  const [productTallies, ordersCount, activeCampaigns, upcomingCampaigns, recentActivity, mtd, lastMonthAgg] = await Promise.all([
+    prisma.$queryRaw<Array<Record<string, number | bigint>>>`
+      SELECT
+        COUNT(*)                                                              AS total,
+        COUNT(*) FILTER (WHERE syncStatus = 'modified')                       AS modified,
+        COUNT(*) FILTER (WHERE syncStatus = 'error')                          AS errors,
+        COUNT(*) FILTER (WHERE imageUrl IS NULL)                              AS noImage,
+        COUNT(*) FILTER (WHERE categoryName IS NULL)                          AS noCategory,
+        COUNT(*) FILTER (WHERE stock <= 0 AND infiniteStock = 0)              AS noStock,
+        COUNT(*) FILTER (WHERE (stock > 0 OR infiniteStock = 1)
+                           AND (lastSoldAt IS NULL OR lastSoldAt < ${staleIso})) AS stale
+      FROM Product`,
     prisma.order.count(),
     prisma.campaign.findMany({ where: { status: "active" }, orderBy: { endDate: "asc" }, select: { id: true, name: true, endDate: true, _count: { select: { items: true } } }, take: 5 }),
     prisma.campaign.findMany({ where: { status: "draft", startDate: { gt: now } }, orderBy: { startDate: "asc" }, select: { id: true, name: true, startDate: true }, take: 5 }),
@@ -43,6 +52,10 @@ export default async function HomePage() {
     prisma.order.aggregate({ where: { status: { not: "cancelled" }, orderedAt: { gte: startThisMonth } }, _sum: { total: true }, _count: true }),
     prisma.order.aggregate({ where: { status: { not: "cancelled" }, orderedAt: { gte: startLastMonth, lt: startThisMonth } }, _sum: { total: true }, _count: true }),
   ]);
+  const t = productTallies[0] ?? {};
+  const n = (k: string) => Number(t[k] ?? 0); // libsql returns counts as BigInt
+  const total = n("total"), modified = n("modified"), errors = n("errors"),
+    noImage = n("noImage"), noCategory = n("noCategory"), noStock = n("noStock"), stale = n("stale");
   const hasSales = ordersCount > 0;
 
   // KPIs: mes en curso vs mes anterior.

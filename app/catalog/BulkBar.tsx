@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { notifyPendingChanged } from "@/lib/pendingEvent";
 
 interface Props {
   count: number;
@@ -36,6 +37,7 @@ export default function BulkBar({ count, ids, categories, onClear, onDone }: Pro
         : action === "stage-delete" ? "marcados para eliminar"
         : "actualizados";
       setResult(`✓ ${n} productos ${verb}`);
+      notifyPendingChanged();
       setTimeout(() => { setResult(""); setMode(null); onDone(); }, 1500);
     } catch (e: unknown) {
       setResult(e instanceof Error ? e.message : "Error");

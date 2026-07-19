@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PENDING_EVENT } from "@/lib/pendingEvent";
 
 const NAV = [
   {
@@ -106,6 +107,22 @@ function relTime(iso: string | null): string {
   return `hace ${Math.round(secs / 86400)} d`;
 }
 
+export type SyncSummaryItem = {
+  id: number;
+  name: string;
+  action: "created" | "updated" | "deleted";
+  fields: string[];
+};
+
+const FIELD_LABEL: Record<string, string> = {
+  name: "nombre", price: "precio", promotionalPrice: "precio promocional",
+  stock: "stock", sku: "SKU", published: "visibilidad", tags: "etiquetas",
+  categories: "colecciones", description: "descripción", imagen: "imagen",
+  seoTitle: "SEO", seoDescription: "SEO",
+};
+const fieldLabels = (fields: string[]) =>
+  [...new Set(fields.map((f) => FIELD_LABEL[f] ?? f))].join(", ");
+
 export default function Sidebar() {
   const path = usePathname();
   const router = useRouter();
@@ -113,6 +130,8 @@ export default function Sidebar() {
   const [failed, setFailed] = useState(0); // last push errored — needs an explicit retry
   const [pulling, setPulling] = useState(false);
   const [push, setPush] = useState<{ active: boolean; done: number; total: number; errors: number }>({ active: false, done: 0, total: 0, errors: 0 });
+  // What the last push actually did, shown as a dismissible recap when it ends.
+  const [summary, setSummary] = useState<SyncSummaryItem[] | null>(null);
   const [lastPull, setLastPull] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false); // desktop: hide the sidebar
@@ -158,10 +177,17 @@ export default function Sidebar() {
     // Progress is cumulative across batches so the button reads naturally.
     let carried = 0;
     let carriedErrors = 0;
+    const carriedSummary: SyncSummaryItem[] = [];
     setPush({ active: true, done: 0, total: queued, errors: 0 });
+    setSummary(null);
 
     const finish = () => {
-      setTimeout(() => { setPush({ active: false, done: 0, total: 0, errors: 0 }); refreshPending(); router.refresh(); }, 1200);
+      setTimeout(() => {
+        setPush({ active: false, done: 0, total: 0, errors: 0 });
+        if (carriedSummary.length) setSummary(carriedSummary);
+        refreshPending();
+        router.refresh();
+      }, 1200);
     };
 
     const runBatch = () => {
@@ -177,6 +203,7 @@ export default function Sidebar() {
           es.close();
           carried += data.done;
           carriedErrors += data.errors;
+          if (Array.isArray(data.summary)) carriedSummary.push(...data.summary);
           setPush((p) => ({ ...p, done: carried, errors: carriedErrors }));
           // Guard against a stuck queue: only continue if this batch moved something.
           if (data.remaining > 0 && data.done > 0) runBatch();
@@ -210,16 +237,26 @@ export default function Sidebar() {
     return () => { document.body.style.overflow = prev; };
   }, [drawerOpen]);
 
-  // The pending count used to refresh only on navigation, so edits made while
-  // staying on a page left the button stale. Poll it, and re-check as soon as
-  // the tab regains focus (after editing elsewhere).
+  // Event-driven refresh instead of polling. The 10-second interval this
+  // replaces counted the whole Product table 8.640 times a day per open tab —
+  // the main driver of the Turso read-quota blowout. Edits dispatch
+  // PENDING_EVENT; regaining focus re-checks at most once a minute (covers
+  // changes made from another tab or device).
+  const lastFocusCheck = useRef(0);
   useEffect(() => {
-    const t = setInterval(() => { if (!document.hidden) refreshPending(); }, 10_000);
-    const onFocus = () => refreshPending();
+    const onPending = () => refreshPending();
+    const onFocus = () => {
+      if (document.hidden) return;
+      const now = Date.now();
+      if (now - lastFocusCheck.current < 60_000) return;
+      lastFocusCheck.current = now;
+      refreshPending();
+    };
+    window.addEventListener(PENDING_EVENT, onPending);
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onFocus);
     return () => {
-      clearInterval(t);
+      window.removeEventListener(PENDING_EVENT, onPending);
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onFocus);
     };
@@ -394,6 +431,37 @@ export default function Sidebar() {
       </div>
 
     </aside>
+
+    {/* Post-sync recap: what the push just changed on Tienda Nube. */}
+    {summary && (
+      <div className="card-float anim-up" style={{
+        position: "fixed", bottom: 16, right: 16, zIndex: 500,
+        width: 340, maxWidth: "calc(100vw - 32px)", maxHeight: "60dvh",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
+          <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+            Sincronizado con Tienda Nube
+            <span style={{ marginLeft: 7, color: "var(--color-subtle)", fontWeight: 500, fontVariantNumeric: "tabular-nums" }}>{summary.length}</span>
+          </span>
+          <button onClick={() => setSummary(null)} aria-label="Cerrar sumario" style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+        </div>
+        <div style={{ overflowY: "auto", padding: "8px 16px 12px" }}>
+          {summary.map((it) => (
+            <div key={`${it.action}-${it.id}`} style={{ padding: "7px 0", borderBottom: "1px solid var(--color-divider)", fontSize: "0.8125rem" }}>
+              <div style={{ color: "var(--color-ink)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+              <div style={{ fontSize: "0.75rem", marginTop: 1, color: it.action === "deleted" ? "var(--color-danger)" : it.action === "created" ? "var(--color-success)" : "var(--color-muted)" }}>
+                {it.action === "created" ? "creado en Tienda Nube"
+                  : it.action === "deleted" ? "eliminado de Tienda Nube"
+                  : it.fields.length ? `actualizado: ${fieldLabels(it.fields)}` : "actualizado"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
     </>
   );
 }

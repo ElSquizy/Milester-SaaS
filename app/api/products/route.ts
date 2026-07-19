@@ -5,7 +5,7 @@ import { syncProductToTiendaNube } from "@/lib/tiendanube";
 
 export async function GET() {
   const products = await prisma.product.findMany({
-    include: { promotion: true, variants: true },
+    include: { variants: true },
     orderBy: { updatedAt: "desc" },
   });
   return NextResponse.json(products);
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
             },
           },
         },
-        include: { variants: true, promotion: true },
+        include: { variants: true },
       });
       return NextResponse.json(updated, { status: 201 });
     } catch (err: unknown) {

@@ -6,6 +6,7 @@ import DescriptionEditor, { type Tmpl } from "./DescriptionEditor";
 import ImageTab from "./ImageTab";
 import type { TemplateData } from "@/lib/descriptionTemplates";
 import { useIsMobile } from "@/components/useIsMobile";
+import { notifyPendingChanged } from "@/lib/pendingEvent";
 
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number };
 
@@ -145,6 +146,7 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || "Error al guardar");
       }
+      notifyPendingChanged();
       return true;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error");

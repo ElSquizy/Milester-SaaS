@@ -5,6 +5,13 @@ import { pushProductImage } from "@/lib/productImage";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+export type SyncResult = {
+  /** True when this push CREATED the product on TN (e.g. a duplicated product). */
+  created: boolean;
+  /** Distinct changelog fields this push carried — feeds the post-sync recap. */
+  fields: string[];
+};
+
 /**
  * Pushes a single product's current local state to Tienda Nube and marks it synced.
  * Marks any unsynced changelog entries for the product as synced.
@@ -13,12 +20,19 @@ import { pushProductImage } from "@/lib/productImage";
 export async function syncOneProduct(
   productId: number,
   settings: { storeId: string; accessToken: string }
-) {
+): Promise<SyncResult> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     include: { variants: { orderBy: { id: "asc" } }, categories: { include: { category: true } } },
   });
   if (!product) throw new Error("Producto no encontrado");
+
+  // What this push is carrying, read before the bookkeeping marks it synced.
+  const pendingChanges = await prisma.changelog.findMany({
+    where: { productId, synced: false },
+    select: { field: true },
+    distinct: ["field"],
+  });
 
   // TN expects category ids as integers and tags as a comma-separated string.
   const categoryTnIds = product.categories
@@ -99,6 +113,10 @@ export async function syncOneProduct(
       throw err;
     }
   }
+
+  const fields = pendingChanges.map((c) => c.field);
+  if (needsImage && !fields.includes("imagen")) fields.push("imagen");
+  return { created: wasCreate, fields };
 }
 
 /**

@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
+import { notifyPendingChanged } from "@/lib/pendingEvent";
 
 /**
  * Coalesces `router.refresh()` calls from inline edits.
@@ -22,6 +23,6 @@ export function useDeferredRefresh(delay = 1500) {
 
   return useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => { timer.current = null; router.refresh(); }, delay);
+    timer.current = setTimeout(() => { timer.current = null; router.refresh(); notifyPendingChanged(); }, delay);
   }, [router, delay]);
 }

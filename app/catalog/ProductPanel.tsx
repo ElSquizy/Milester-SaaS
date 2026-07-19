@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import CollectionPicker from "./CollectionPicker";
 import { isInFocus, toggleFocus } from "./useFocus";
 import { useIsMobile } from "@/components/useIsMobile";
+import { notifyPendingChanged } from "@/lib/pendingEvent";
 
 type Variant = { id: number; price: number; stock: number | null; sku: string | null };
 
@@ -140,6 +141,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
         throw new Error(data.error || "Error al guardar");
       }
       setSaved(true);
+      notifyPendingChanged();
       setTimeout(() => { setSaved(false); onSaved(); }, 1000);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Error desconocido");
@@ -155,6 +157,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
     try {
       const res = await fn();
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Error"); }
+      notifyPendingChanged();
       onSaved();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");

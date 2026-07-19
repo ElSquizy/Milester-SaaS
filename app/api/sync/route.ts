@@ -54,6 +54,8 @@ export async function GET(req: Request) {
 
         let done = 0;
         let errors = 0;
+        // Per-product recap for the sidebar's post-sync summary card.
+        const summary: Array<{ id: number; name: string; action: "created" | "updated" | "deleted"; fields: string[] }> = [];
 
         for (const [i, p] of pending.entries()) {
           if (i > 0) await new Promise((r) => setTimeout(r, GAP_MS)); // stay under TN's rate limit
@@ -63,10 +65,12 @@ export async function GET(req: Request) {
             if (p.pendingDelete) {
               // Staged deletion: remove from TN, then locally.
               await deleteOneProduct(p.id, creds);
+              summary.push({ id: p.id, name: p.name, action: "deleted", fields: [] });
             } else {
               // Mark as syncing so the UI can show the ⟳ state.
               await prisma.product.update({ where: { id: p.id }, data: { syncStatus: "syncing" } });
-              await syncOneProduct(p.id, creds);
+              const result = await syncOneProduct(p.id, creds);
+              summary.push({ id: p.id, name: p.name, action: result.created ? "created" : "updated", fields: result.fields });
             }
             done++;
           } catch (err) {
@@ -88,7 +92,7 @@ export async function GET(req: Request) {
         // What's still queued after this slice (errors are excluded from the
         // default queue, so a failing product can't loop forever).
         const remaining = await prisma.product.count({ where });
-        send({ status: "done", done, errors, total: pending.length, remaining });
+        send({ status: "done", done, errors, total: pending.length, remaining, summary });
       } catch (err) {
         send({ status: "error", message: err instanceof Error ? err.message : "Error desconocido" });
       } finally {

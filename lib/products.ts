@@ -111,7 +111,7 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
 
   const existing = await prisma.product.findUnique({
     where: { id: idNum },
-    include: { variants: true, promotion: true, categories: true },
+    include: { variants: true, categories: true },
   });
   if (!existing) return { notFound: true as const };
 
@@ -194,7 +194,7 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
       ...(tmplData !== undefined ? { descriptionData: tmplData } : {}),
       ...(imageTemplateId !== undefined ? { imageTemplateId: imageTemplateId === null ? null : Number(imageTemplateId) } : {}),
       ...(productImageUrl !== undefined ? { productImageUrl: productImageUrl || null } : {}),
-      ...(price !== undefined ? { price, ...(priceChanged && !existing.promotion ? { originalPrice: price } : {}) } : {}),
+      ...(price !== undefined ? { price, ...(priceChanged ? { originalPrice: price } : {}) } : {}),
       ...(normPromo !== undefined ? { promotionalPrice: normPromo } : {}),
       ...(effStock !== undefined ? { stock: effStock } : {}),
       ...(newInfinite !== undefined ? { infiniteStock: newInfinite } : {}),
@@ -207,7 +207,7 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
       ...(imageChanged ? { imageDirty: true } : {}),
       ...(hasChanges && !syncNow ? { syncStatus: "modified" } : {}),
     },
-    include: { variants: true, promotion: true },
+    include: { variants: true },
   });
 
   if (skuChanged) {
@@ -235,7 +235,7 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
     if (creds) {
       try {
         await syncOneProduct(product.id, creds);
-        const updated = await prisma.product.findUnique({ where: { id: product.id }, include: { variants: true, promotion: true } });
+        const updated = await prisma.product.findUnique({ where: { id: product.id }, include: { variants: true } });
         if (updated) product = updated;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : "Sync failed";
