@@ -66,15 +66,16 @@ async function applyPromo(meta: CampaignMeta, productId: number, campaignPrice: 
     productPromo = campaignPrice < product.price ? campaignPrice : product.price;
   }
 
-  await prisma.$transaction([
-    prisma.product.update({
-      where: { id: productId },
-      data: { promotionalPrice: productPromo, syncStatus: "modified", ...(meta.addTag ? { tags: addTag(product.tags, meta.addTag) } : {}) },
-    }),
-    prisma.changelog.create({
-      data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: String(productPromo) },
-    }),
-  ]);
+  // Sequential, not $transaction: batch transactions over the Turso HTTP adapter
+  // fail with "unable to start a transaction in the given time" in long loops,
+  // and this runs once per product when applying a campaign to hundreds.
+  await prisma.product.update({
+    where: { id: productId },
+    data: { promotionalPrice: productPromo, syncStatus: "modified", ...(meta.addTag ? { tags: addTag(product.tags, meta.addTag) } : {}) },
+  });
+  await prisma.changelog.create({
+    data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: String(productPromo) },
+  });
   if (meta.addCategoryId) {
     await prisma.productCategory.upsert({
       where: { productId_categoryId: { productId, categoryId: meta.addCategoryId } },
@@ -110,15 +111,15 @@ async function clearPromo(meta: CampaignMeta, productId: number, campaignId: num
   }
 
   const productPromo = takeover ? takeover.campaignPrice : null;
-  await prisma.$transaction([
-    prisma.product.update({
-      where: { id: productId },
-      data: { promotionalPrice: productPromo, syncStatus: "modified", ...(meta.addTag ? { tags: removeTag(product.tags, meta.addTag) } : {}) },
-    }),
-    prisma.changelog.create({
-      data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: productPromo == null ? null : String(productPromo) },
-    }),
-  ]);
+  // Sequential, not $transaction — same Turso-HTTP limitation as in applyPromo.
+  // This is the restore-original-price path: it must not die mid-campaign-end.
+  await prisma.product.update({
+    where: { id: productId },
+    data: { promotionalPrice: productPromo, syncStatus: "modified", ...(meta.addTag ? { tags: removeTag(product.tags, meta.addTag) } : {}) },
+  });
+  await prisma.changelog.create({
+    data: { productId, field: "promotionalPrice", oldValue: product.promotionalPrice == null ? null : String(product.promotionalPrice), newValue: productPromo == null ? null : String(productPromo) },
+  });
   if (meta.addCategoryId) {
     await prisma.productCategory.deleteMany({ where: { productId, categoryId: meta.addCategoryId } });
   }

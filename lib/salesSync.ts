@@ -100,13 +100,14 @@ export async function syncOrdersIncremental(storeId: string, accessToken: string
 
     const existing = await prisma.order.findUnique({ where: { tiendaNubeId: tnId }, select: { id: true } });
     if (existing) {
-      await prisma.$transaction([
-        prisma.orderItem.deleteMany({ where: { orderId: existing.id } }),
-        prisma.order.update({
-          where: { id: existing.id },
-          data: { ...orderData, items: { create: items } },
-        }),
-      ]);
+      // Sequential, not $transaction — same Turso-HTTP limitation as in
+      // lib/categories.ts. If the update fails mid-pair the order is briefly
+      // itemless; the next pull re-upserts it whole.
+      await prisma.orderItem.deleteMany({ where: { orderId: existing.id } });
+      await prisma.order.update({
+        where: { id: existing.id },
+        data: { ...orderData, items: { create: items } },
+      });
       updated++;
     } else {
       await prisma.order.create({

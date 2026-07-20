@@ -131,12 +131,17 @@ export async function linkProductCategories(
     .map((id) => tnIdToLocalId.get(id))
     .filter((x): x is number => x != null);
 
-  await prisma.$transaction([
-    prisma.productCategory.deleteMany({ where: { productId } }),
-    ...localIds.map((categoryId) =>
-      prisma.productCategory.create({ data: { productId, categoryId } })
-    ),
-  ]);
+  // Sequential, not $transaction: Prisma's batch transactions over the Turso
+  // HTTP adapter fail with "unable to start a transaction in the given time"
+  // when called in long loops (this runs once per product on a full pull).
+  // Worst case of the non-atomic window is a product briefly missing links —
+  // the next pull re-links it.
+  await prisma.productCategory.deleteMany({ where: { productId } });
+  if (localIds.length) {
+    await prisma.productCategory.createMany({
+      data: localIds.map((categoryId) => ({ productId, categoryId })),
+    });
+  }
 }
 
 /** TN tags come as a comma-separated string; store locally as a JSON array. */
