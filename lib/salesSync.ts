@@ -27,18 +27,21 @@ async function fetchOrdersUpdatedSince(storeId: string, accessToken: string, sin
  * Upserts orders + customers (never wipes), then recomputes sales aggregates.
  * Returns counts of new vs updated orders.
  */
-export async function syncOrdersIncremental(storeId: string, accessToken: string) {
+export async function syncOrdersIncremental(storeId: string, accessToken: string, opts: { full?: boolean } = {}) {
   const settings = await prisma.settings.findFirst();
   const scanStart = new Date();
 
   // Baseline: last sync, else the newest order we have, else a 30-day lookback.
+  // `full` ignores the cursor entirely and walks the whole order history — the
+  // disaster-recovery path: a fresh database would otherwise only ever see the
+  // last 30 days of sales.
   const BUFFER_MS = 10 * 60 * 1000;
   let sinceDate: Date | null = settings?.lastOrderSyncAt ?? null;
   if (!sinceDate) {
     const newest = await prisma.order.findFirst({ orderBy: { orderedAt: "desc" }, select: { orderedAt: true } });
     sinceDate = newest ? newest.orderedAt : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   }
-  const since = new Date(sinceDate.getTime() - BUFFER_MS).toISOString();
+  const since = opts.full ? undefined : new Date(sinceDate.getTime() - BUFFER_MS).toISOString();
 
   const tnOrders = await fetchOrdersUpdatedSince(storeId, accessToken, since);
 
@@ -113,8 +116,9 @@ export async function syncOrdersIncremental(storeId: string, accessToken: string
     }
   }
 
-  // Recompute per-product sales aggregates if anything changed.
-  if (created + updated > 0) {
+  // Recompute per-product sales aggregates if anything changed (always on a
+  // full rebuild, where the derived columns start out empty or stale).
+  if (opts.full || created + updated > 0) {
     const agg = await prisma.orderItem.groupBy({
       by: ["productId"],
       where: { productId: { not: null }, order: { status: { not: "cancelled" } } },

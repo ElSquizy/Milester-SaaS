@@ -25,9 +25,15 @@ export async function GET(req: Request) {
   }
   const creds = { storeId: settings.storeId, accessToken: settings.accessToken };
 
-  const out: Record<string, unknown> = { ranAt: new Date().toISOString() };
+  // ?full=1 → disaster-recovery pass: reconcile the ENTIRE catalog and order
+  // history instead of the incremental window. Heavy (minutes); run it against a
+  // local dev server rather than the deployed function, whose time limit it can
+  // exceed. See docs/arquitectura.md → Reconstrucción.
+  const full = new URL(req.url).searchParams.get("full") === "1";
+
+  const out: Record<string, unknown> = { ranAt: new Date().toISOString(), ...(full ? { full: true } : {}) };
   try { out.campaigns = await tickCampaigns(creds); } catch (e) { out.campaignsError = e instanceof Error ? e.message : "error"; }
-  try { out.pull = await pullFromTiendaNube(creds.storeId, creds.accessToken, {}); } catch (e) { out.pullError = e instanceof Error ? e.message : "error"; }
+  try { out.pull = await pullFromTiendaNube(creds.storeId, creds.accessToken, { full }); } catch (e) { out.pullError = e instanceof Error ? e.message : "error"; }
 
   await prisma.settings.update({ where: { id: settings.id }, data: { lastCampaignTickAt: new Date(), lastPullAt: new Date() } }).catch(() => {});
   return NextResponse.json(out);

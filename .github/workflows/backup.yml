@@ -1,0 +1,51 @@
+name: Backup semanal de datos propios
+
+# Exporta los datos IRRECONSTRUIBLES (campañas, plantillas, tickets, costos,
+# changelog, settings) y los guarda como artifact de GitHub (90 días de
+# retención). El espejo comercial no se exporta: se reconstruye desde Tienda
+# Nube (docs/arquitectura.md → Reconstrucción).
+#
+# Requiere dos secrets de repo (los mismos valores que usa Vercel):
+#   TURSO_DATABASE_URL · TURSO_AUTH_TOKEN
+#
+# El artifact contiene las credenciales de Settings: mantené el repo privado.
+on:
+  schedule:
+    - cron: "0 6 * * 1" # lunes 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secrets are configured
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+        run: |
+          [ -n "$TURSO_DATABASE_URL" ] || { echo "::error::Falta el secret TURSO_DATABASE_URL"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Solo hace falta @libsql/client; --no-save evita tocar el lockfile.
+      # (NODE_PATH no sirve: los imports ESM no lo consultan.)
+      - name: Install libsql client
+        run: npm install --no-save --ignore-scripts @libsql/client
+
+      - name: Run backup
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+        run: |
+          touch .env  # el script la lee; los valores reales van por entorno
+          node scripts/backup.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: milester-backup-${{ github.run_id }}
+          path: backups/*.json
+          retention-days: 90
+          if-no-files-found: error

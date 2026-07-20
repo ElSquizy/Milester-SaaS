@@ -41,7 +41,7 @@ export async function pullFromTiendaNube(
   }
 
   try {
-    summary.sales = await syncOrdersIncremental(storeId, accessToken);
+    summary.sales = await syncOrdersIncremental(storeId, accessToken, opts);
   } catch (err) {
     summary.errors.push(`Ventas: ${err instanceof Error ? err.message : "error"}`);
   }

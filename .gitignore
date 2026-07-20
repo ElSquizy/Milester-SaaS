@@ -49,3 +49,6 @@ next-env.d.ts
 /app/generated/prisma
 /prisma/replica.db*
 /prisma/.tmp.*
+
+# Database backups — contain Settings credentials, never commit
+backups/
