@@ -2,7 +2,11 @@ import { prisma } from "./prisma";
 import { getProductVariants } from "./variants";
 import { renderTemplate } from "./descriptionTemplates";
 
-/** Common data shared by every variant of one source product (editable per group). */
+/**
+ * Product-level data of one variant's future product: description, image,
+ * collections, tags, SEO. Seeded from the parent in the preview, then editable
+ * per variant independently (each item carries its own copy).
+ */
 export type CommonData = {
   descriptionTemplateId: number | null;
   descriptionData: Record<string, unknown> | null;
@@ -87,8 +91,8 @@ export async function previewSplit(
   });
 
   for (const p of products) {
-    // Common data snapshot from the parent — the starting point the group editor
-    // can override; applies to every variant of this product.
+    // Snapshot the parent's product-level data — the per-variant starting point
+    // each item can then override independently.
     const common: CommonData = {
       descriptionTemplateId: p.descriptionTemplateId,
       descriptionData: (() => { try { return p.descriptionData ? JSON.parse(p.descriptionData) : null; } catch { return null; } })(),
@@ -225,16 +229,22 @@ export function getJob(jobId: number) {
   });
 }
 
-/** Applies a manual edit to one item, then revalidates the whole job. */
+/**
+ * Applies a manual edit to one item, then revalidates the whole job. Covers both
+ * the variant-specific fields (name, price, promo, stock, sku) and this variant's
+ * own product-level data (`common`: description/image template, collections,
+ * tags, SEO) — each variant is edited independently.
+ */
 export async function editItem(
   jobId: number,
   itemId: number,
-  patch: { name?: string; price?: number; promotionalPrice?: number | null; stock?: number | null; sku?: string | null; skipped?: boolean; duplicateAction?: "create" | "skip" | null },
+  patch: { name?: string; price?: number; promotionalPrice?: number | null; stock?: number | null; sku?: string | null; skipped?: boolean; duplicateAction?: "create" | "skip" | null; common?: Partial<CommonData> },
 ) {
   const item = await prisma.transformationItem.findFirst({ where: { id: itemId, jobId } });
   if (!item) throw new Error("Ítem no encontrado");
   const job = await prisma.transformationJob.findUnique({ where: { id: jobId } });
   if (!job || job.status !== "draft") throw new Error("La transformación ya no es editable");
+  if (item.targetProductId) throw new Error("Esta variante ya fue creada");
 
   const fieldPatch = {
     ...(patch.name !== undefined ? { name: patch.name } : {}),
@@ -242,6 +252,8 @@ export async function editItem(
     ...(patch.promotionalPrice !== undefined ? { promotionalPrice: patch.promotionalPrice == null ? null : Number(patch.promotionalPrice) } : {}),
     ...(patch.stock !== undefined ? { stock: patch.stock == null ? null : Math.round(Number(patch.stock)) } : {}),
     ...(patch.sku !== undefined ? { sku: patch.sku?.trim() || null } : {}),
+    // Product-level data of THIS variant, merged into its own snapshot.
+    ...(patch.common ? { commonData: JSON.stringify({ ...parseCommon(item.commonData), ...patch.common }) } : {}),
   };
   const touchedFields = Object.keys(fieldPatch).length > 0;
 
@@ -254,37 +266,6 @@ export async function editItem(
       // Un-skipping or editing puts it back through validation as an edit.
       ...(patch.skipped === false || (touchedFields && item.status !== "skipped") ? { status: "edited" } : {}),
     },
-  });
-  await validateJob(jobId);
-  return getJob(jobId);
-}
-
-/**
- * Edits the COMMON data of every variant of one source product at once — the
- * "modificar todos los componentes a la vez" the review UI exposes: description
- * template, image template, collections, tags, SEO. Writes the same JSON to
- * every not-yet-created item in the group.
- */
-export async function editGroup(jobId: number, sourceProductId: number, common: Partial<CommonData>) {
-  const job = await prisma.transformationJob.findUnique({ where: { id: jobId } });
-  if (!job || job.status !== "draft") throw new Error("La transformación ya no es editable");
-
-  const items = await prisma.transformationItem.findMany({
-    where: { jobId, sourceProductId, targetProductId: null },
-  });
-  if (items.length === 0) return getJob(jobId);
-
-  // Merge the patch into the group's current common data (all items share it).
-  const merged = { ...parseCommon(items[0].commonData), ...common };
-  const json = JSON.stringify(merged);
-  await prisma.transformationItem.updateMany({
-    where: { jobId, sourceProductId, targetProductId: null },
-    data: { commonData: json },
-  });
-  // A common-data change is a manual edit; reflect it on non-error items.
-  await prisma.transformationItem.updateMany({
-    where: { jobId, sourceProductId, targetProductId: null, status: { in: ["ready", "warning"] } },
-    data: { status: "edited" },
   });
   await validateJob(jobId);
   return getJob(jobId);
@@ -331,9 +312,9 @@ export async function confirmSplit(jobId: number) {
       continue;
     }
     try {
-      // Common data: the group's edited values (falling back to the parent for
-      // anything not overridden). A chosen description template is rendered now,
-      // exactly like the catalog's edit does.
+      // Product-level data: this variant's own edited values (parent as fallback
+      // for anything not overridden). A chosen description template is rendered
+      // now, exactly like the catalog's edit does.
       const c = parseCommon(it.commonData);
       let description = parent.description;
       if (c.descriptionTemplateId) {
@@ -348,7 +329,7 @@ export async function confirmSplit(jobId: number) {
         data: {
           tiendaNubeId: null,
           name: it.name.trim(),
-          // Common data (group-edited, parent as fallback):
+          // Product-level data (per-variant edited, parent as fallback):
           description,
           seoTitle: c.seoTitle,
           seoDescription: c.seoDescription,

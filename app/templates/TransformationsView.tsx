@@ -306,15 +306,6 @@ function ReviewCenter({ job, setJob, isMobile, descTemplates, imageTemplates, on
     if (res.ok) setJob(j); else setError(j.error || "No se pudo guardar");
   }
 
-  async function patchGroup(sourceProductId: number, common: Partial<CommonData>) {
-    const res = await fetch(`/api/transformations/${job.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sourceProductId, common }),
-    });
-    const j = await res.json();
-    if (res.ok) setJob(j); else setError(j.error || "No se pudo guardar");
-  }
-
   async function confirm() {
     setBusy(true); setError("");
     try {
@@ -373,8 +364,6 @@ function ReviewCenter({ job, setJob, isMobile, descTemplates, imageTemplates, on
             const gErr = gStatuses.filter((s) => s === "error").length;
             const gWarn = gStatuses.filter((s) => s === "warning").length;
             const open = openGroup === g.sourceId;
-            const editable = isDraft && g.items.some((i) => i.status !== "created");
-            const common = parseCommon(g.items[0].commonData);
             return (
               <div key={g.sourceId} className="card" style={{ overflow: "hidden", padding: 0 }}>
                 {/* Cabecera del grupo */}
@@ -388,25 +377,21 @@ function ReviewCenter({ job, setJob, isMobile, descTemplates, imageTemplates, on
 
                 {open && (
                   <div style={{ borderTop: "1px solid var(--color-divider)" }}>
-                    {/* Datos comunes — se aplican a TODAS las variantes de este producto */}
-                    <CommonForm
-                      common={common}
-                      editable={editable}
-                      isMobile={isMobile}
-                      descTemplates={descTemplates}
-                      imageTemplates={imageTemplates}
-                      onChange={(patch) => patchGroup(g.sourceId, patch)}
-                    />
-                    {/* Variantes — datos específicos, editables inline */}
-                    <div style={{ padding: "6px 14px 12px" }}>
-                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "8px 0 8px" }}>
-                        Variantes · datos propios de cada una
-                      </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        {g.items.map((it) => (
-                          <VariantRow key={it.id} item={it} editable={isDraft && it.status !== "created"} isMobile={isMobile} onPatch={(p) => patchItem(it.id, p)} />
-                        ))}
-                      </div>
+                    {/* Cada variante se edita de forma independiente: sus datos
+                        propios y sus datos de producto (descripción, imagen,
+                        colecciones, tags, SEO). */}
+                    <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                      {g.items.map((it) => (
+                        <VariantRow
+                          key={it.id}
+                          item={it}
+                          editable={isDraft && it.status !== "created"}
+                          isMobile={isMobile}
+                          descTemplates={descTemplates}
+                          imageTemplates={imageTemplates}
+                          onPatch={(p) => patchItem(it.id, p)}
+                        />
+                      ))}
                     </div>
                   </div>
                 )}
@@ -449,9 +434,9 @@ function ReviewCenter({ job, setJob, isMobile, descTemplates, imageTemplates, on
 
 function confirmDialog(msg: string) { return typeof window !== "undefined" ? window.confirm(msg) : false; }
 
-/* ── Datos comunes del grupo (una edición → todas las variantes) ── */
+/* ── Datos de producto de UNA variante (edición independiente) ── */
 
-function CommonForm({ common, editable, isMobile, descTemplates, imageTemplates, onChange }: {
+function DetailsForm({ common, editable, isMobile, descTemplates, imageTemplates, onChange }: {
   common: CommonData; editable: boolean; isMobile: boolean;
   descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[];
   onChange: (patch: Partial<CommonData>) => void;
@@ -467,10 +452,7 @@ function CommonForm({ common, editable, isMobile, descTemplates, imageTemplates,
   const commitTags = () => { const arr = tags.split(",").map((t) => t.trim()).filter(Boolean); if (JSON.stringify(arr) !== JSON.stringify(common.tags)) onChange({ tags: arr }); };
 
   return (
-    <div style={{ padding: "12px 14px", background: "var(--color-surface-2)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-subtle)" }}>
-        Datos comunes · se aplican a todas las variantes ↗
-      </div>
+    <div style={{ marginTop: 8, padding: "12px", borderRadius: "var(--radius-input)", background: "var(--color-surface-2)", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
         <label style={fieldLbl}>Plantilla de descripción
           <select className="input" disabled={!editable} value={common.descriptionTemplateId ?? ""} onChange={(e) => onChange({ descriptionTemplateId: e.target.value ? Number(e.target.value) : null })} style={{ background: "var(--color-surface)" }}>
@@ -521,12 +503,20 @@ function CommonForm({ common, editable, isMobile, descTemplates, imageTemplates,
 
 /* ── Una variante, editable inline ─────────────────────── */
 
-function VariantRow({ item, editable, isMobile, onPatch }: {
-  item: Item; editable: boolean; isMobile: boolean; onPatch: (patch: Record<string, unknown>) => void;
+function VariantRow({ item, editable, isMobile, descTemplates, imageTemplates, onPatch }: {
+  item: Item; editable: boolean; isMobile: boolean;
+  descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[];
+  onPatch: (patch: Record<string, unknown>) => void;
 }) {
   const meta = STATUS_META[item.status] ?? STATUS_META.ready;
   const issues = parseIssues(item.issues);
   const isDup = issues.some((x) => x.code === "name-exists");
+  const [showDetails, setShowDetails] = useState(false);
+  const common = parseCommon(item.commonData);
+  const detailCount =
+    (common.descriptionTemplateId ? 1 : 0) + (common.imageTemplateId ? 1 : 0) +
+    (common.productImageUrl ? 1 : 0) + common.categoryIds.length + common.tags.length +
+    (common.seoTitle ? 1 : 0) + (common.seoDescription ? 1 : 0);
   const [d, setD] = useState({ name: item.name, price: String(item.price), promo: item.promotionalPrice != null ? String(item.promotionalPrice) : "", stock: item.stock != null ? String(item.stock) : "", sku: item.sku ?? "" });
   useEffect(() => { setD({ name: item.name, price: String(item.price), promo: item.promotionalPrice != null ? String(item.promotionalPrice) : "", stock: item.stock != null ? String(item.stock) : "", sku: item.sku ?? "" }); }, [item.id, item.name, item.price, item.promotionalPrice, item.stock, item.sku]);
 
@@ -589,6 +579,23 @@ function VariantRow({ item, editable, isMobile, onPatch }: {
           <input className="input" placeholder="—" disabled={!editable} value={d.sku} onChange={(e) => setD((s) => ({ ...s, sku: e.target.value }))} onBlur={commit} style={{ fontFamily: "var(--font-mono), monospace" }} />
         </label>
       </div>
+
+      {/* Datos de producto de esta variante — descripción, imagen, colecciones, tags, SEO */}
+      <button onClick={() => setShowDetails((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "8px 0 0", marginTop: 4 }}>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-subtle)", transform: showDetails ? "none" : "rotate(-90deg)", transition: "transform 0.12s", flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
+        <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-muted)" }}>Descripción, imagen, colecciones y SEO</span>
+        {detailCount > 0 && <span className="pill pill-neutral" style={{ fontSize: "0.625rem" }}>{detailCount}</span>}
+      </button>
+      {showDetails && (
+        <DetailsForm
+          common={common}
+          editable={editable}
+          isMobile={isMobile}
+          descTemplates={descTemplates}
+          imageTemplates={imageTemplates}
+          onChange={(patch) => onPatch({ common: patch })}
+        />
+      )}
     </div>
   );
 }

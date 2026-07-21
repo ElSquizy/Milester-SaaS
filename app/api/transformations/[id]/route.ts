@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getJob, editItem, editGroup, confirmSplit, deleteJob } from "@/lib/transformations";
+import { getJob, editItem, confirmSplit, deleteJob } from "@/lib/transformations";
 
 export const runtime = "nodejs";
 
@@ -11,17 +11,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 }
 
 /**
- * PATCH:
- *   { itemId, ...campos }            → edita un ítem (datos específicos de la variante)
- *   { sourceProductId, common:{…} }  → edita los datos comunes de todo el grupo
+ * PATCH { itemId, ...campos } → edita una variante: sus datos propios
+ * (nombre, precio, promo, stock, sku) y/o su bloque `common` (descripción,
+ * imagen, colecciones, tags, SEO). Cada variante se edita de forma independiente.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
   try {
-    const job = body.sourceProductId != null && body.common
-      ? await editGroup(Number(id), Number(body.sourceProductId), body.common)
-      : await editItem(Number(id), Number(body.itemId), body);
+    const job = await editItem(Number(id), Number(body.itemId), body);
     return NextResponse.json(job);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 400 });
