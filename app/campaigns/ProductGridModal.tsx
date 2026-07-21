@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { PickedProduct } from "./CampaignExtras";
 import { useIsMobile } from "@/components/useIsMobile";
+import CollectionFilter, { type Tri, serializeTri, cycleTri } from "@/components/CollectionFilter";
 
 type GridProduct = { id: number; name: string; sku: string | null; price: number; promotionalPrice: number | null; imageUrl: string | null; categoryName: string | null; variantCount?: number };
 
@@ -9,9 +10,11 @@ type GridProduct = { id: number; name: string; sku: string | null; price: number
  * Centric grid modal for selecting products (like the catalog's hybrid modal).
  * Search + paginated grid of tiles with checkbox selection. Robust selection via a Map.
  */
-export default function ProductGridModal({ initial, categories, onConfirm, onClose, allowEmpty, confirmLabel, title, tileBadge, disabledReason }: {
+export default function ProductGridModal({ initial, categories, categoryTree, onConfirm, onClose, allowEmpty, confirmLabel, title, tileBadge, disabledReason }: {
   initial: PickedProduct[];
   categories: string[];
+  /** Optional nested tree so the collection filter mirrors the catalog's nesting. */
+  categoryTree?: { name: string; tnId: string; parentTnId: string | null }[];
   onConfirm: (picked: PickedProduct[]) => void;
   onClose: () => void;
   allowEmpty?: boolean;
@@ -24,7 +27,8 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
 }) {
   const isMobile = useIsMobile();
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("");
+  const [collections, setCollections] = useState<Tri>(new Map());
+  const category = serializeTri(collections);
   const [products, setProducts] = useState<GridProduct[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -91,12 +95,14 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
             </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o SKU..." style={{ flex: 1 }} />
-            <select className="input" value={category} onChange={(e) => setCategory(e.target.value)} style={{ width: 200 }}>
-              <option value="">Todas las colecciones</option>
-              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o SKU..." style={{ flex: 1, minWidth: 180 }} />
+            <CollectionFilter
+              categories={categories}
+              tree={categoryTree}
+              state={collections}
+              onCycle={(v) => setCollections((m) => cycleTri(m, v))}
+            />
           </div>
         </div>
 

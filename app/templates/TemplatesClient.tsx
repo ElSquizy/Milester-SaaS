@@ -9,7 +9,7 @@ import TransformationsView from "./TransformationsView";
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
 
-export default function TemplatesClient({ templates, imageTemplates, categories }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; categories: string[] }) {
+export default function TemplatesClient({ templates, imageTemplates, categories, categoryTree }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[] }) {
   const router = useRouter();
   const [mode, setMode] = useState<"desc" | "image" | "transform">("desc");
   const [selId, setSelId] = useState<number | null>(templates[0]?.id ?? null);
@@ -89,7 +89,7 @@ export default function TemplatesClient({ templates, imageTemplates, categories 
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
           <div style={{ maxWidth: 760, margin: "0 auto" }}>
-            <TransformationsView categories={categories} descTemplates={templates.map((t) => ({ id: t.id, name: t.name }))} imageTemplates={imageTemplates.map((t) => ({ id: t.id, name: t.name }))} />
+            <TransformationsView categories={categories} categoryTree={categoryTree} descTemplates={templates.map((t) => ({ id: t.id, name: t.name }))} imageTemplates={imageTemplates.map((t) => ({ id: t.id, name: t.name }))} />
           </div>
         </div>
       )}

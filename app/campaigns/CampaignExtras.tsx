@@ -67,8 +67,8 @@ type VariantInfo = { id: number; label: string; price: number; promotionalPrice:
  * ACTIVE campaigns (edit products + prices → Guardar cambios, applied live). You can add
  * products (grid), remove them, and edit each promo price.
  */
-export function ItemsPanel({ campaignId, status, categories, onClose, onApplied }: {
-  campaignId: number; status: string; categories: string[]; onClose: () => void; onApplied: () => void;
+export function ItemsPanel({ campaignId, status, categories, categoryTree, onClose, onApplied }: {
+  campaignId: number; status: string; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[]; onClose: () => void; onApplied: () => void;
 }) {
   const isMobile = useIsMobile();
   const [items, setItems] = useState<Item[]>([]);
@@ -286,6 +286,7 @@ export function ItemsPanel({ campaignId, status, categories, onClose, onApplied 
         <ProductGridModal
           initial={items.map((i) => ({ id: i.productId, name: i.name, imageUrl: i.imageUrl, price: i.basePrice }))}
           categories={categories}
+          categoryTree={categoryTree}
           allowEmpty
           confirmLabel="Confirmar"
           title="Productos de la campaña"

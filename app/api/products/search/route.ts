@@ -10,9 +10,18 @@ export async function GET(req: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const category = url.searchParams.get("category")?.trim() || "";
 
+  // Tri-state collection filter (same encoding as the catalog): comma-separated
+  // names, "+name"/"name" to include, "-name" to exclude.
+  const inc: string[] = [], exc: string[] = [];
+  for (const raw of category.split(",").map((s) => s.trim()).filter(Boolean)) {
+    if (raw.startsWith("-")) exc.push(raw.slice(1));
+    else inc.push(raw.startsWith("+") ? raw.slice(1) : raw);
+  }
+
   const where = {
     ...(q ? { OR: [{ name: { contains: q } }, { sku: { contains: q } }] } : {}),
-    ...(category ? { categories: { some: { category: { name: category } } } } : {}),
+    ...(inc.length ? { categories: { some: { category: { name: { in: inc } } } } } : {}),
+    ...(exc.length ? { NOT: { categories: { some: { category: { name: { in: exc } } } } } } : {}),
   };
 
   const [total, products] = await Promise.all([

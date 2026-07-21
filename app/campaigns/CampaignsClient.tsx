@@ -10,6 +10,7 @@ import { useIsMobile } from "@/components/useIsMobile";
 interface Props {
   campaigns: Campaign[];
   categories: string[];
+  categoryTree?: { name: string; tnId: string; parentTnId: string | null }[];
   pendingCount: number;
 }
 
@@ -22,7 +23,7 @@ type Analytics = {
 const fmtDate = (d: string | null) =>
   d ? new Date(d).toLocaleDateString("es-AR", { day: "numeric", month: "short" }) : null;
 
-export default function CampaignsClient({ campaigns, categories, pendingCount }: Props) {
+export default function CampaignsClient({ campaigns, categories, categoryTree, pendingCount }: Props) {
   const router = useRouter();
   const isMobile = useIsMobile();
   const [creating, setCreating] = useState(false);
@@ -130,6 +131,7 @@ export default function CampaignsClient({ campaigns, categories, pendingCount }:
           campaignId={itemsFor}
           status={campaigns.find((c) => c.id === itemsFor)?.status || "draft"}
           categories={categories}
+          categoryTree={categoryTree}
           onClose={() => setItemsFor(null)}
           onApplied={() => { setItemsFor(null); router.refresh(); }}
         />

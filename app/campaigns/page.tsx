@@ -17,18 +17,20 @@ export default async function CampaignsPage() {
     // picker can surgically target any of the store's categories.
     prisma.category.findMany({
       where: { products: { some: {} } },
-      select: { name: true },
+      select: { name: true, tiendaNubeId: true, parentTnId: true },
       orderBy: { name: "asc" },
     }),
     prisma.product.count({ where: { syncStatus: "modified" } }),
   ]);
 
   const categoryList = [...new Set(categories.map((c) => c.name))].filter(Boolean);
+  const categoryTree = categories.filter((c) => c.name).map((c) => ({ name: c.name, tnId: c.tiendaNubeId, parentTnId: c.parentTnId }));
 
   return (
     <CampaignsClient
       campaigns={campaigns as unknown as Campaign[]}
       categories={categoryList}
+      categoryTree={categoryTree}
       pendingCount={pendingCount}
     />
   );

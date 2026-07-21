@@ -62,7 +62,7 @@ const STATUS_META: Record<string, { label: string; color: string; icon: string }
   created: { label: "Creado", color: "var(--color-success)", icon: "✓" },
 };
 
-export default function TransformationsView({ categories, descTemplates, imageTemplates }: { categories: string[]; descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[] }) {
+export default function TransformationsView({ categories, categoryTree, descTemplates, imageTemplates }: { categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[]; descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[] }) {
   const isMobile = useIsMobile();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [step, setStep] = useState<null | "select" | "config" | "review">(null);
@@ -131,6 +131,7 @@ export default function TransformationsView({ categories, descTemplates, imageTe
         <ProductGridModal
           initial={picked}
           categories={categories}
+          categoryTree={categoryTree}
           title="Dividir por variantes — elegí los productos"
           confirmLabel="Continuar"
           tileBadge={(p) => (p.variantCount && p.variantCount > 1 ? `${p.variantCount} variantes` : null)}
