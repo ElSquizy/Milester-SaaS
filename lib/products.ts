@@ -152,6 +152,8 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
   if (resolvedDescription !== undefined && existing.description !== resolvedDescription) changes.push({ field: "description", oldValue: null, newValue: null });
   if (published !== undefined && existing.published !== published) changes.push({ field: "published", oldValue: String(existing.published), newValue: String(published) });
   if (tags !== undefined && existing.tags !== tags) changes.push({ field: "tags", oldValue: existing.tags, newValue: tags });
+  if (seoTitle !== undefined && existing.seoTitle !== seoTitle) changes.push({ field: "seoTitle", oldValue: existing.seoTitle, newValue: seoTitle });
+  if (seoDescription !== undefined && existing.seoDescription !== seoDescription) changes.push({ field: "seoDescription", oldValue: null, newValue: null });
   // Stock: `infiniteStock` toggles unlimited (stock null). A finite number turns it off.
   const normStock = stock === undefined ? undefined : (stock === null || stock === "" || isNaN(Number(stock)) ? null : Math.max(0, Math.round(Number(stock))));
   const newInfinite: boolean | undefined = infiniteStock === undefined ? undefined : !!infiniteStock;
