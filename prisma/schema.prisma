@@ -337,4 +337,10 @@ model TransformationItem {
   issues           String  @default("[]")    // JSON [{level:"warning"|"error", code, message}]
   duplicateAction  String? // when a same-name product exists: "create" | "skip"
   targetProductId  Int?    // local Product created on confirm — the traceability link
+  // Common data shared by every variant of the SAME source product, editable
+  // once at the group level. JSON: { descriptionTemplateId, descriptionData,
+  // imageTemplateId, productImageUrl, categoryIds:[], tags:[], seoTitle,
+  // seoDescription }. Snapshotted from the parent at preview; a group edit
+  // writes the same value to all its items. Empty {} = inherit the parent as-is.
+  commonData       String  @default("{}")
 }

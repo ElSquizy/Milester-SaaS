@@ -2,8 +2,29 @@
 import { useCallback, useEffect, useState } from "react";
 import ProductGridModal from "../campaigns/ProductGridModal";
 import type { PickedProduct } from "../campaigns/CampaignExtras";
+import CollectionPicker from "../catalog/CollectionPicker";
 import { useIsMobile } from "@/components/useIsMobile";
 import { notifyPendingChanged } from "@/lib/pendingEvent";
+
+type TemplateOpt = { id: number; name: string };
+type CommonData = {
+  descriptionTemplateId: number | null; descriptionData: Record<string, unknown> | null;
+  imageTemplateId: number | null; productImageUrl: string | null;
+  categoryIds: number[]; tags: string[]; seoTitle: string | null; seoDescription: string | null;
+};
+const parseCommon = (json: string): CommonData => {
+  try {
+    const c = JSON.parse(json);
+    return {
+      descriptionTemplateId: c.descriptionTemplateId ?? null, descriptionData: c.descriptionData ?? null,
+      imageTemplateId: c.imageTemplateId ?? null, productImageUrl: c.productImageUrl ?? null,
+      categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds : [], tags: Array.isArray(c.tags) ? c.tags : [],
+      seoTitle: c.seoTitle ?? null, seoDescription: c.seoDescription ?? null,
+    };
+  } catch {
+    return { descriptionTemplateId: null, descriptionData: null, imageTemplateId: null, productImageUrl: null, categoryIds: [], tags: [], seoTitle: null, seoDescription: null };
+  }
+};
 
 /**
  * "Transformaciones" — plantillas de operación sobre el catálogo. La primera:
@@ -20,6 +41,7 @@ type Item = {
   id: number; sourceProductId: number; sourceName: string; variantLabel: string;
   name: string; price: number; promotionalPrice: number | null; stock: number | null; sku: string | null;
   status: string; issues: string; duplicateAction: string | null; targetProductId: number | null;
+  commonData: string;
 };
 type Job = { id: number; type: string; status: string; nameRule: string; createdAt: string; items: Item[] };
 type JobSummary = { id: number; type: string; status: string; createdAt: string; _count: { items: number } };
@@ -40,7 +62,7 @@ const STATUS_META: Record<string, { label: string; color: string; icon: string }
   created: { label: "Creado", color: "var(--color-success)", icon: "✓" },
 };
 
-export default function TransformationsView({ categories }: { categories: string[] }) {
+export default function TransformationsView({ categories, descTemplates, imageTemplates }: { categories: string[]; descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[] }) {
   const isMobile = useIsMobile();
   const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [step, setStep] = useState<null | "select" | "config" | "review">(null);
@@ -135,6 +157,8 @@ export default function TransformationsView({ categories }: { categories: string
           job={job}
           setJob={setJob}
           isMobile={isMobile}
+          descTemplates={descTemplates}
+          imageTemplates={imageTemplates}
           onClose={() => { setStep(null); setJob(null); setPicked([]); loadJobs(); }}
         />
       )}
@@ -238,10 +262,11 @@ function ConfigModal({ picked, isMobile, onBack, onClose, onPreview }: {
 
 /* ── Centro de revisión ───────────────────────────────── */
 
-function ReviewCenter({ job, setJob, isMobile, onClose }: {
-  job: Job; setJob: (j: Job) => void; isMobile: boolean; onClose: () => void;
+function ReviewCenter({ job, setJob, isMobile, descTemplates, imageTemplates, onClose }: {
+  job: Job; setJob: (j: Job) => void; isMobile: boolean;
+  descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[]; onClose: () => void;
 }) {
-  const [openItem, setOpenItem] = useState<number | null>(null);
+  const [openGroup, setOpenGroup] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ created: number; failed: number; skipped: number } | null>(null);
@@ -262,13 +287,15 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
   const readyPct = active.length ? Math.round(((active.length - counts.error) / active.length) * 100) : 0;
   const canConfirm = isDraft && toCreate > 0 && counts.error === 0 && undecidedDups === 0;
 
-  // Group items by source product, preserving order.
-  const groups: { sourceName: string; items: Item[] }[] = [];
+  // Group by source product, preserving order.
+  const groups: { sourceId: number; sourceName: string; items: Item[] }[] = [];
   for (const it of job.items) {
     const g = groups[groups.length - 1];
-    if (g && g.items[0].sourceProductId === it.sourceProductId) g.items.push(it);
-    else groups.push({ sourceName: it.sourceName, items: [it] });
+    if (g && g.sourceId === it.sourceProductId) g.items.push(it);
+    else groups.push({ sourceId: it.sourceProductId, sourceName: it.sourceName, items: [it] });
   }
+  // First group open by default.
+  useEffect(() => { if (openGroup === null && groups[0]) setOpenGroup(groups[0].sourceId); }, [openGroup, groups]);
 
   async function patchItem(itemId: number, patch: Record<string, unknown>) {
     const res = await fetch(`/api/transformations/${job.id}`, {
@@ -276,8 +303,16 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
       body: JSON.stringify({ itemId, ...patch }),
     });
     const j = await res.json();
-    if (res.ok) setJob(j);
-    else setError(j.error || "No se pudo guardar");
+    if (res.ok) setJob(j); else setError(j.error || "No se pudo guardar");
+  }
+
+  async function patchGroup(sourceProductId: number, common: Partial<CommonData>) {
+    const res = await fetch(`/api/transformations/${job.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceProductId, common }),
+    });
+    const j = await res.json();
+    if (res.ok) setJob(j); else setError(j.error || "No se pudo guardar");
   }
 
   async function confirm() {
@@ -288,7 +323,7 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
       if (!res.ok) throw new Error(d.error || "No se pudo confirmar");
       setJob(d.job);
       setResult({ created: d.created, failed: d.failed, skipped: d.skipped });
-      if (d.created > 0) notifyPendingChanged(); // the sidebar's "Subir cambios" lights up
+      if (d.created > 0) notifyPendingChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally { setBusy(false); }
@@ -302,7 +337,7 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
 
   return (
     <div className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? 0 : "36px 24px" }}>
-      <div className="anim-modal" style={{ width: "100%", maxWidth: isMobile ? "none" : 860, height: isMobile ? "100dvh" : "calc(100dvh - 72px)", background: "var(--color-surface)", borderRadius: isMobile ? 0 : "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div className="anim-modal" style={{ width: "100%", maxWidth: isMobile ? "none" : 880, height: isMobile ? "100dvh" : "calc(100dvh - 72px)", background: "var(--color-surface)", borderRadius: isMobile ? 0 : "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Header + resumen */}
         <div style={{ padding: isMobile ? "14px 16px" : "18px 24px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
@@ -321,9 +356,7 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
           {isDraft && (
             <div style={{ marginTop: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.6875rem", color: "var(--color-subtle)", marginBottom: 4 }}>
-                <span>
-                  {counts.ready} listos · {counts.edited} editados · {counts.warning} con avisos · {counts.error} con errores
-                </span>
+                <span>{counts.ready} listos · {counts.edited} editados · {counts.warning} con avisos · {counts.error} con errores</span>
                 <span style={{ fontVariantNumeric: "tabular-nums" }}>{readyPct}%</span>
               </div>
               <div style={{ height: 5, borderRadius: 999, background: "var(--color-surface-2)", overflow: "hidden" }}>
@@ -333,27 +366,53 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
           )}
         </div>
 
-        {/* Lista agrupada */}
-        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "10px 12px" : "14px 20px" }}>
-          {groups.map((g) => (
-            <div key={g.items[0].id} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-ink)", padding: "4px 4px 6px" }}>{g.sourceName}</div>
-              <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-input)", overflow: "hidden" }}>
-                {g.items.map((it, i) => (
-                  <ItemRow
-                    key={it.id}
-                    item={it}
-                    first={i === 0}
-                    open={openItem === it.id}
-                    editable={isDraft && it.status !== "created"}
-                    onToggle={() => setOpenItem(openItem === it.id ? null : it.id)}
-                    onPatch={(patch) => patchItem(it.id, patch)}
-                    isMobile={isMobile}
-                  />
-                ))}
+        {/* Grupos colapsables por producto original */}
+        <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "10px 12px" : "14px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {groups.map((g) => {
+            const gStatuses = g.items.map((i) => i.status);
+            const gErr = gStatuses.filter((s) => s === "error").length;
+            const gWarn = gStatuses.filter((s) => s === "warning").length;
+            const open = openGroup === g.sourceId;
+            const editable = isDraft && g.items.some((i) => i.status !== "created");
+            const common = parseCommon(g.items[0].commonData);
+            return (
+              <div key={g.sourceId} className="card" style={{ overflow: "hidden", padding: 0 }}>
+                {/* Cabecera del grupo */}
+                <button onClick={() => setOpenGroup(open ? null : g.sourceId)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "12px 14px", border: "none", background: open ? "var(--color-surface-2)" : "transparent", cursor: "pointer" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-subtle)", transform: open ? "none" : "rotate(-90deg)", transition: "transform 0.12s", flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.sourceName}</span>
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)", flexShrink: 0 }}>{g.items.length} {g.items.length === 1 ? "variante" : "variantes"}</span>
+                  {gErr > 0 && <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-danger)", flexShrink: 0 }}>{gErr} ✕</span>}
+                  {gErr === 0 && gWarn > 0 && <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-warning)", flexShrink: 0 }}>{gWarn} ⚠</span>}
+                </button>
+
+                {open && (
+                  <div style={{ borderTop: "1px solid var(--color-divider)" }}>
+                    {/* Datos comunes — se aplican a TODAS las variantes de este producto */}
+                    <CommonForm
+                      common={common}
+                      editable={editable}
+                      isMobile={isMobile}
+                      descTemplates={descTemplates}
+                      imageTemplates={imageTemplates}
+                      onChange={(patch) => patchGroup(g.sourceId, patch)}
+                    />
+                    {/* Variantes — datos específicos, editables inline */}
+                    <div style={{ padding: "6px 14px 12px" }}>
+                      <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "8px 0 8px" }}>
+                        Variantes · datos propios de cada una
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {g.items.map((it) => (
+                          <VariantRow key={it.id} item={it} editable={isDraft && it.status !== "created"} isMobile={isMobile} onPatch={(p) => patchItem(it.id, p)} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer */}
@@ -390,115 +449,149 @@ function ReviewCenter({ job, setJob, isMobile, onClose }: {
 
 function confirmDialog(msg: string) { return typeof window !== "undefined" ? window.confirm(msg) : false; }
 
-/* ── Fila + editor de un producto generado ─────────────── */
+/* ── Datos comunes del grupo (una edición → todas las variantes) ── */
 
-function ItemRow({ item, first, open, editable, onToggle, onPatch, isMobile }: {
-  item: Item; first: boolean; open: boolean; editable: boolean;
-  onToggle: () => void; onPatch: (patch: Record<string, unknown>) => void; isMobile: boolean;
+function CommonForm({ common, editable, isMobile, descTemplates, imageTemplates, onChange }: {
+  common: CommonData; editable: boolean; isMobile: boolean;
+  descTemplates: TemplateOpt[]; imageTemplates: TemplateOpt[];
+  onChange: (patch: Partial<CommonData>) => void;
+}) {
+  const [showCats, setShowCats] = useState(false);
+  const [tags, setTags] = useState(common.tags.join(", "));
+  const [seoTitle, setSeoTitle] = useState(common.seoTitle ?? "");
+  const [seoDesc, setSeoDesc] = useState(common.seoDescription ?? "");
+  const [imgUrl, setImgUrl] = useState(common.productImageUrl ?? "");
+  const [catIds, setCatIds] = useState<Set<number>>(new Set(common.categoryIds));
+  useEffect(() => { setTags(common.tags.join(", ")); setSeoTitle(common.seoTitle ?? ""); setSeoDesc(common.seoDescription ?? ""); setImgUrl(common.productImageUrl ?? ""); setCatIds(new Set(common.categoryIds)); }, [common]);
+
+  const commitTags = () => { const arr = tags.split(",").map((t) => t.trim()).filter(Boolean); if (JSON.stringify(arr) !== JSON.stringify(common.tags)) onChange({ tags: arr }); };
+
+  return (
+    <div style={{ padding: "12px 14px", background: "var(--color-surface-2)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--color-subtle)" }}>
+        Datos comunes · se aplican a todas las variantes ↗
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+        <label style={fieldLbl}>Plantilla de descripción
+          <select className="input" disabled={!editable} value={common.descriptionTemplateId ?? ""} onChange={(e) => onChange({ descriptionTemplateId: e.target.value ? Number(e.target.value) : null })} style={{ background: "var(--color-surface)" }}>
+            <option value="">Heredar del original</option>
+            {descTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <label style={fieldLbl}>Plantilla de imagen
+          <select className="input" disabled={!editable} value={common.imageTemplateId ?? ""} onChange={(e) => onChange({ imageTemplateId: e.target.value ? Number(e.target.value) : null })} style={{ background: "var(--color-surface)" }}>
+            <option value="">Heredar del original</option>
+            {imageTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </label>
+        <label style={{ ...fieldLbl, gridColumn: isMobile ? undefined : "1 / -1" }}>Imagen del producto (URL)
+          <input className="input" disabled={!editable} value={imgUrl} placeholder="https://…/producto.png" onChange={(e) => setImgUrl(e.target.value)} onBlur={() => { if ((imgUrl.trim() || null) !== (common.productImageUrl ?? null)) onChange({ productImageUrl: imgUrl.trim() || null }); }} style={{ background: "var(--color-surface)", fontSize: "0.8125rem" }} />
+        </label>
+        <label style={fieldLbl}>SEO · Título
+          <input className="input" disabled={!editable} value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} onBlur={() => { if ((seoTitle.trim() || null) !== (common.seoTitle ?? null)) onChange({ seoTitle: seoTitle.trim() || null }); }} style={{ background: "var(--color-surface)" }} />
+        </label>
+        <label style={fieldLbl}>SEO · Descripción
+          <input className="input" disabled={!editable} value={seoDesc} onChange={(e) => setSeoDesc(e.target.value)} onBlur={() => { if ((seoDesc.trim() || null) !== (common.seoDescription ?? null)) onChange({ seoDescription: seoDesc.trim() || null }); }} style={{ background: "var(--color-surface)" }} />
+        </label>
+        <label style={{ ...fieldLbl, gridColumn: isMobile ? undefined : "1 / -1" }}>Etiquetas <span style={{ fontWeight: 400, color: "var(--color-faint)" }}>(separadas por coma)</span>
+          <input className="input" disabled={!editable} value={tags} onChange={(e) => setTags(e.target.value)} onBlur={commitTags} style={{ background: "var(--color-surface)" }} />
+        </label>
+      </div>
+
+      {/* Colecciones */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)" }}>Colecciones <span style={{ fontWeight: 400, color: "var(--color-faint)" }}>· {catIds.size}</span></span>
+          {editable && <button onClick={() => setShowCats((v) => !v)} style={{ border: "none", background: "transparent", color: "var(--color-brand)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}>{showCats ? "Listo" : "Editar"}</button>}
+        </div>
+        {showCats && editable ? (
+          <CollectionPicker
+            selectedIds={catIds}
+            onToggle={(id) => {
+              setCatIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); onChange({ categoryIds: [...n] }); return n; });
+            }}
+          />
+        ) : (
+          <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>{catIds.size === 0 ? "Sin colecciones" : `${catIds.size} ${catIds.size === 1 ? "colección heredada/elegida" : "colecciones"}`}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Una variante, editable inline ─────────────────────── */
+
+function VariantRow({ item, editable, isMobile, onPatch }: {
+  item: Item; editable: boolean; isMobile: boolean; onPatch: (patch: Record<string, unknown>) => void;
 }) {
   const meta = STATUS_META[item.status] ?? STATUS_META.ready;
   const issues = parseIssues(item.issues);
   const isDup = issues.some((x) => x.code === "name-exists");
-  const [draft, setDraft] = useState({ name: item.name, price: String(item.price), promo: item.promotionalPrice != null ? String(item.promotionalPrice) : "", stock: item.stock != null ? String(item.stock) : "", sku: item.sku ?? "" });
-  useEffect(() => {
-    setDraft({ name: item.name, price: String(item.price), promo: item.promotionalPrice != null ? String(item.promotionalPrice) : "", stock: item.stock != null ? String(item.stock) : "", sku: item.sku ?? "" });
-  }, [item.id, item.name, item.price, item.promotionalPrice, item.stock, item.sku]);
+  const [d, setD] = useState({ name: item.name, price: String(item.price), promo: item.promotionalPrice != null ? String(item.promotionalPrice) : "", stock: item.stock != null ? String(item.stock) : "", sku: item.sku ?? "" });
+  useEffect(() => { setD({ name: item.name, price: String(item.price), promo: item.promotionalPrice != null ? String(item.promotionalPrice) : "", stock: item.stock != null ? String(item.stock) : "", sku: item.sku ?? "" }); }, [item.id, item.name, item.price, item.promotionalPrice, item.stock, item.sku]);
 
   function commit() {
-    const price = parseFloat(draft.price.replace(",", "."));
-    const promo = draft.promo.trim() === "" ? null : parseFloat(draft.promo.replace(",", "."));
-    const stock = draft.stock.trim() === "" ? null : Math.round(Number(draft.stock));
-    const changed = draft.name !== item.name || price !== item.price || (promo ?? null) !== (item.promotionalPrice ?? null)
-      || (stock ?? null) !== (item.stock ?? null) || (draft.sku.trim() || null) !== (item.sku ?? null);
+    const price = parseFloat(d.price.replace(",", "."));
+    const promo = d.promo.trim() === "" ? null : parseFloat(d.promo.replace(",", "."));
+    const stock = d.stock.trim() === "" ? null : Math.round(Number(d.stock));
+    const changed = d.name !== item.name || price !== item.price || (promo ?? null) !== (item.promotionalPrice ?? null) || (stock ?? null) !== (item.stock ?? null) || (d.sku.trim() || null) !== (item.sku ?? null);
     if (!changed) return;
-    onPatch({ name: draft.name, price: isNaN(price) ? item.price : price, promotionalPrice: promo != null && isNaN(promo) ? item.promotionalPrice : promo, stock, sku: draft.sku });
+    onPatch({ name: d.name, price: isNaN(price) ? item.price : price, promotionalPrice: promo != null && isNaN(promo) ? item.promotionalPrice : promo, stock, sku: d.sku });
   }
 
   return (
-    <div style={{ borderTop: first ? "none" : "1px solid var(--color-divider)" }}>
-      <button onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "9px 12px", border: "none", background: open ? "var(--color-surface-2)" : "transparent", cursor: "pointer" }}>
-        <span aria-hidden style={{ color: meta.color, fontWeight: 700, width: 16, flexShrink: 0, textAlign: "center" }}>{meta.icon}</span>
-        <span style={{ flex: 1, minWidth: 0, fontSize: "0.8125rem", color: item.status === "skipped" ? "var(--color-subtle)" : "var(--color-ink)", textDecoration: item.status === "skipped" ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {item.name}
-        </span>
-        {!isMobile && (
-          <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{money(item.price)}</span>
-        )}
+    <div style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-input)", padding: 10, background: "var(--color-surface)", opacity: item.status === "skipped" ? 0.6 : 1 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        <span aria-hidden style={{ color: meta.color, fontWeight: 700, flexShrink: 0 }}>{meta.icon}</span>
+        <span style={{ flex: 1, fontSize: "0.75rem", color: "var(--color-subtle)", fontWeight: 600 }}>Variante: {item.variantLabel}</span>
         <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: meta.color, flexShrink: 0 }}>{meta.label}</span>
-      </button>
+        {editable && (item.status === "skipped"
+          ? <button onClick={() => onPatch({ skipped: false })} style={miniBtn}>Incluir</button>
+          : <button onClick={() => onPatch({ skipped: true })} style={{ ...miniBtn, color: "var(--color-muted)" }}>Omitir</button>)}
+      </div>
 
-      {open && (
-        <div style={{ padding: "12px 14px", background: "var(--color-surface-2)", borderTop: "1px solid var(--color-divider)", display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Issues */}
-          {issues.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {issues.map((x, i) => (
-                <div key={i} style={{ fontSize: "0.75rem", color: x.level === "error" ? "var(--color-danger)" : "var(--color-warning)", fontWeight: 500 }}>
-                  {x.level === "error" ? "✕" : "⚠"} {x.message}
-                </div>
-              ))}
+      {issues.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 8 }}>
+          {issues.map((x, i) => (
+            <div key={i} style={{ fontSize: "0.72rem", color: x.level === "error" ? "var(--color-danger)" : "var(--color-warning)", fontWeight: 500 }}>
+              {x.level === "error" ? "✕" : "⚠"} {x.message}
             </div>
-          )}
-
-          {/* Duplicado: decisión explícita */}
-          {isDup && editable && (
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: "0.8125rem" }}>
-              <span style={{ fontWeight: 600, color: "var(--color-ink)" }}>¿Qué hacemos?</span>
-              {(["create", "skip"] as const).map((a) => (
-                <label key={a} style={{ display: "inline-flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
-                  <input type="radio" name={`dup-${item.id}`} checked={item.duplicateAction === a} onChange={() => onPatch({ duplicateAction: a })} />
-                  {a === "create" ? "Crear igualmente" : "Omitir este producto"}
-                </label>
-              ))}
-            </div>
-          )}
-
-          {/* Campos editables + origen del dato */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-            <Field label="Nombre" origin="⚙ Generado por la regla" full>
-              <input className="input" value={draft.name} disabled={!editable} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} onBlur={commit} style={{ background: "var(--color-surface)" }} />
-            </Field>
-            <Field label="Precio" origin={`↗ De la variante ${item.variantLabel}`}>
-              <input className="input" inputMode="decimal" value={draft.price} disabled={!editable} onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))} onBlur={commit} style={{ background: "var(--color-surface)", fontVariantNumeric: "tabular-nums" }} />
-            </Field>
-            <Field label="Promocional" origin={`↗ De la variante ${item.variantLabel}`}>
-              <input className="input" inputMode="decimal" placeholder="—" value={draft.promo} disabled={!editable} onChange={(e) => setDraft((d) => ({ ...d, promo: e.target.value }))} onBlur={commit} style={{ background: "var(--color-surface)", fontVariantNumeric: "tabular-nums" }} />
-            </Field>
-            <Field label="Stock" origin={`↗ De la variante ${item.variantLabel} · vacío = ∞`}>
-              <input className="input" inputMode="numeric" placeholder="∞" value={draft.stock} disabled={!editable} onChange={(e) => setDraft((d) => ({ ...d, stock: e.target.value }))} onBlur={commit} style={{ background: "var(--color-surface)", fontVariantNumeric: "tabular-nums" }} />
-            </Field>
-            <Field label="SKU" origin={`↗ De la variante ${item.variantLabel}`}>
-              <input className="input" placeholder="—" value={draft.sku} disabled={!editable} onChange={(e) => setDraft((d) => ({ ...d, sku: e.target.value }))} onBlur={commit} style={{ background: "var(--color-surface)", fontFamily: "var(--font-mono), monospace" }} />
-            </Field>
-          </div>
-
-          <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", lineHeight: 1.5 }}>
-            ↗ Descripción, imagen, colecciones, etiquetas y SEO se heredan de «{item.sourceName}».
-          </div>
-
-          {editable && (
-            <div>
-              {item.status === "skipped" ? (
-                <button className="btn-secondary" onClick={() => onPatch({ skipped: false })} style={{ fontSize: "0.75rem", padding: "5px 11px" }}>Volver a incluir</button>
-              ) : (
-                <button className="btn-secondary" onClick={() => onPatch({ skipped: true })} style={{ fontSize: "0.75rem", padding: "5px 11px", color: "var(--color-muted)" }}>Omitir este producto</button>
-              )}
-            </div>
-          )}
+          ))}
         </div>
       )}
+
+      {isDup && editable && (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", fontSize: "0.75rem", marginBottom: 8 }}>
+          <span style={{ fontWeight: 600, color: "var(--color-ink)" }}>¿Qué hacemos?</span>
+          {(["create", "skip"] as const).map((a) => (
+            <label key={a} style={{ display: "inline-flex", gap: 5, alignItems: "center", cursor: "pointer" }}>
+              <input type="radio" name={`dup-${item.id}`} checked={item.duplicateAction === a} onChange={() => onPatch({ duplicateAction: a })} />
+              {a === "create" ? "Crear igualmente" : "Omitir"}
+            </label>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr 1fr", gap: 8 }}>
+        <label style={{ ...fieldLbl, gridColumn: isMobile ? "1 / -1" : undefined }}>Nombre
+          <input className="input" disabled={!editable} value={d.name} onChange={(e) => setD((s) => ({ ...s, name: e.target.value }))} onBlur={commit} />
+        </label>
+        <label style={fieldLbl}>Precio
+          <input className="input" inputMode="decimal" disabled={!editable} value={d.price} onChange={(e) => setD((s) => ({ ...s, price: e.target.value }))} onBlur={commit} style={{ fontVariantNumeric: "tabular-nums" }} />
+        </label>
+        <label style={fieldLbl}>Promo
+          <input className="input" inputMode="decimal" placeholder="—" disabled={!editable} value={d.promo} onChange={(e) => setD((s) => ({ ...s, promo: e.target.value }))} onBlur={commit} style={{ fontVariantNumeric: "tabular-nums" }} />
+        </label>
+        <label style={fieldLbl}>Stock
+          <input className="input" inputMode="numeric" placeholder="∞" disabled={!editable} value={d.stock} onChange={(e) => setD((s) => ({ ...s, stock: e.target.value }))} onBlur={commit} style={{ fontVariantNumeric: "tabular-nums" }} />
+        </label>
+        <label style={fieldLbl}>SKU
+          <input className="input" placeholder="—" disabled={!editable} value={d.sku} onChange={(e) => setD((s) => ({ ...s, sku: e.target.value }))} onBlur={commit} style={{ fontFamily: "var(--font-mono), monospace" }} />
+        </label>
+      </div>
     </div>
   );
 }
 
-function Field({ label, origin, full, children }: { label: string; origin: string; full?: boolean; children: React.ReactNode }) {
-  return (
-    <div style={{ gridColumn: full ? "1 / -1" : undefined }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)" }}>{label}</span>
-        <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{origin}</span>
-      </div>
-      {children}
-    </div>
-  );
-}
+const fieldLbl: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, fontSize: "0.72rem", fontWeight: 600, color: "var(--color-muted)" };
+const miniBtn: React.CSSProperties = { border: "1px solid var(--color-border)", background: "transparent", borderRadius: 7, padding: "3px 9px", fontSize: "0.6875rem", fontWeight: 600, cursor: "pointer", color: "var(--color-ink)", flexShrink: 0 };

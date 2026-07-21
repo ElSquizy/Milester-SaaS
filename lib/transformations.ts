@@ -1,5 +1,36 @@
 import { prisma } from "./prisma";
 import { getProductVariants } from "./variants";
+import { renderTemplate } from "./descriptionTemplates";
+
+/** Common data shared by every variant of one source product (editable per group). */
+export type CommonData = {
+  descriptionTemplateId: number | null;
+  descriptionData: Record<string, unknown> | null;
+  imageTemplateId: number | null;
+  productImageUrl: string | null;
+  categoryIds: number[];
+  tags: string[];
+  seoTitle: string | null;
+  seoDescription: string | null;
+};
+
+function parseCommon(json: string): CommonData {
+  try {
+    const c = JSON.parse(json) as Partial<CommonData>;
+    return {
+      descriptionTemplateId: c.descriptionTemplateId ?? null,
+      descriptionData: c.descriptionData ?? null,
+      imageTemplateId: c.imageTemplateId ?? null,
+      productImageUrl: c.productImageUrl ?? null,
+      categoryIds: Array.isArray(c.categoryIds) ? c.categoryIds : [],
+      tags: Array.isArray(c.tags) ? c.tags : [],
+      seoTitle: c.seoTitle ?? null,
+      seoDescription: c.seoDescription ?? null,
+    };
+  } catch {
+    return { descriptionTemplateId: null, descriptionData: null, imageTemplateId: null, productImageUrl: null, categoryIds: [], tags: [], seoTitle: null, seoDescription: null };
+  }
+}
 
 /**
  * "Dividir producto por variantes": turns a multi-variant product into one
@@ -47,7 +78,7 @@ export async function previewSplit(
 
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
-    include: { variants: { orderBy: { id: "asc" } } },
+    include: { variants: { orderBy: { id: "asc" } }, categories: true },
   });
   if (products.length === 0) throw new Error("No se encontraron los productos seleccionados");
 
@@ -56,6 +87,20 @@ export async function previewSplit(
   });
 
   for (const p of products) {
+    // Common data snapshot from the parent — the starting point the group editor
+    // can override; applies to every variant of this product.
+    const common: CommonData = {
+      descriptionTemplateId: p.descriptionTemplateId,
+      descriptionData: (() => { try { return p.descriptionData ? JSON.parse(p.descriptionData) : null; } catch { return null; } })(),
+      imageTemplateId: p.imageTemplateId,
+      productImageUrl: p.productImageUrl,
+      categoryIds: p.categories.map((c) => c.categoryId),
+      tags: (() => { try { return JSON.parse(p.tags || "[]"); } catch { return []; } })(),
+      seoTitle: p.seoTitle,
+      seoDescription: p.seoDescription,
+    };
+    const commonJson = JSON.stringify(common);
+
     // Live-first variant data (labels, price, stock, sku); local fallback.
     let variants: Array<{ localId: number | null; label: string; price: number; promotionalPrice: number | null; stock: number | null; sku: string | null }>;
     try {
@@ -88,6 +133,7 @@ export async function previewSplit(
         data: {
           jobId: job.id, sourceProductId: p.id, sourceName: p.name,
           variantLabel: "", name: p.name, price: p.price, stock: p.stock,
+          commonData: commonJson,
           status: "error",
           issues: JSON.stringify([{ level: "error", code: "no-variants", message: "El producto no tiene variantes suficientes para dividirse" }]),
         },
@@ -109,6 +155,7 @@ export async function previewSplit(
           promotionalPrice: v.promotionalPrice,
           stock: v.stock,
           sku: v.sku,
+          commonData: commonJson,
           ...(v.label ? {} : {
             status: "warning",
             issues: JSON.stringify([{ level: "warning", code: "no-label", message: "La variante no tiene nombre — se usó un número. Revisá el nombre generado." }]),
@@ -213,6 +260,37 @@ export async function editItem(
 }
 
 /**
+ * Edits the COMMON data of every variant of one source product at once — the
+ * "modificar todos los componentes a la vez" the review UI exposes: description
+ * template, image template, collections, tags, SEO. Writes the same JSON to
+ * every not-yet-created item in the group.
+ */
+export async function editGroup(jobId: number, sourceProductId: number, common: Partial<CommonData>) {
+  const job = await prisma.transformationJob.findUnique({ where: { id: jobId } });
+  if (!job || job.status !== "draft") throw new Error("La transformación ya no es editable");
+
+  const items = await prisma.transformationItem.findMany({
+    where: { jobId, sourceProductId, targetProductId: null },
+  });
+  if (items.length === 0) return getJob(jobId);
+
+  // Merge the patch into the group's current common data (all items share it).
+  const merged = { ...parseCommon(items[0].commonData), ...common };
+  const json = JSON.stringify(merged);
+  await prisma.transformationItem.updateMany({
+    where: { jobId, sourceProductId, targetProductId: null },
+    data: { commonData: json },
+  });
+  // A common-data change is a manual edit; reflect it on non-error items.
+  await prisma.transformationItem.updateMany({
+    where: { jobId, sourceProductId, targetProductId: null, status: { in: ["ready", "warning"] } },
+    data: { status: "edited" },
+  });
+  await validateJob(jobId);
+  return getJob(jobId);
+}
+
+/**
  * Confirms the job: creates one LOCAL staged product per non-skipped item.
  * Items with unresolved errors block the whole confirm (the UI surfaces them).
  * Items whose name already exists require an explicit duplicateAction.
@@ -253,27 +331,40 @@ export async function confirmSplit(jobId: number) {
       continue;
     }
     try {
+      // Common data: the group's edited values (falling back to the parent for
+      // anything not overridden). A chosen description template is rendered now,
+      // exactly like the catalog's edit does.
+      const c = parseCommon(it.commonData);
+      let description = parent.description;
+      if (c.descriptionTemplateId) {
+        const tmpl = await prisma.descriptionTemplate.findUnique({ where: { id: c.descriptionTemplateId } });
+        if (tmpl) description = renderTemplate(tmpl.skeleton, (c.descriptionData as Record<string, string | Array<Record<string, string>>>) || {});
+      }
+      const catIds = c.categoryIds.length ? c.categoryIds : parent.categories.map((pc) => pc.categoryId);
+      const imageTemplateId = c.imageTemplateId;
+      const productImageUrl = c.productImageUrl;
+
       const child = await prisma.product.create({
         data: {
           tiendaNubeId: null,
           name: it.name.trim(),
-          // Common data, inherited from the parent:
-          description: parent.description,
-          seoTitle: parent.seoTitle,
-          seoDescription: parent.seoDescription,
-          tags: parent.tags,
+          // Common data (group-edited, parent as fallback):
+          description,
+          seoTitle: c.seoTitle,
+          seoDescription: c.seoDescription,
+          tags: JSON.stringify(c.tags),
           categoryId: parent.categoryId,
           categoryName: parent.categoryName,
           requiresShipping: parent.requiresShipping,
           costUsd: parent.costUsd,
-          descriptionTemplateId: parent.descriptionTemplateId,
-          descriptionData: parent.descriptionData,
+          descriptionTemplateId: c.descriptionTemplateId,
+          descriptionData: c.descriptionData ? JSON.stringify(c.descriptionData) : null,
           // Image: shows the parent's picture right away; imageDirty makes the
-          // push upload the child its OWN copy (same mechanism as duplicating).
+          // push upload the child its OWN copy, composed with the chosen template.
           imageUrl: parent.imageUrl,
-          productImageUrl: parent.productImageUrl,
-          imageTemplateId: parent.imageTemplateId,
-          imageDirty: !!(parent.productImageUrl || parent.imageUrl),
+          productImageUrl,
+          imageTemplateId,
+          imageDirty: !!(productImageUrl || parent.imageUrl || imageTemplateId),
           // Variant-specific data:
           price: it.price,
           promotionalPrice: it.promotionalPrice,
@@ -285,7 +376,7 @@ export async function confirmSplit(jobId: number) {
           published: false, // children are born hidden (reviewed decision)
           syncStatus: "modified", // joins the push queue — TN creation via "Subir cambios"
           variants: { create: [{ tiendaNubeId: null, price: it.price, promotionalPrice: it.promotionalPrice, stock: it.stock, sku: it.sku?.trim() || null, values: "[]" }] },
-          categories: { create: parent.categories.map((pc) => ({ categoryId: pc.categoryId })) },
+          categories: { create: catIds.map((categoryId) => ({ categoryId })) },
         },
         select: { id: true },
       });

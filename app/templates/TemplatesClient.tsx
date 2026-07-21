@@ -89,7 +89,7 @@ export default function TemplatesClient({ templates, imageTemplates, categories 
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
           <div style={{ maxWidth: 760, margin: "0 auto" }}>
-            <TransformationsView categories={categories} />
+            <TransformationsView categories={categories} descTemplates={templates.map((t) => ({ id: t.id, name: t.name }))} imageTemplates={imageTemplates.map((t) => ({ id: t.id, name: t.name }))} />
           </div>
         </div>
       )}
