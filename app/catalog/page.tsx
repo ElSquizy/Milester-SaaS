@@ -82,6 +82,8 @@ export default async function CatalogPage({
     : sort === "worst-selling" ? { unitsSold: "asc" as const }
     : sort === "price-high" ? { price: "desc" as const }
     : sort === "price-low" ? { price: "asc" as const }
+    : sort === "name-asc" ? { nameSort: "asc" as const }
+    : sort === "name-desc" ? { nameSort: "desc" as const }
     : { createdAt: "desc" as const };
 
   const [total, products, categories, pendingCount] = await Promise.all([

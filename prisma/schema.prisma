@@ -42,6 +42,11 @@ model Product {
   id             Int         @id @default(autoincrement())
   tiendaNubeId   String?     @unique
   name           String
+  /// Solo lectura: columna GENERADA por SQLite como lower(name). Existe para
+  /// ordenar alfabéticamente sin distinguir mayúsculas (SQLite ordena en binario
+  /// y dejaba "eFootball"/"inFAMOUS" después de la Z). NUNCA escribirla: la base
+  /// la calcula sola y rechaza cualquier INSERT/UPDATE sobre esta columna.
+  nameSort       String?
   description    String?
   price          Float              // base price
   promotionalPrice Float?           // TN promotional_price (active sale price); null = no sale
@@ -87,6 +92,7 @@ model Product {
   // Turso read-quota blowout).
   @@index([syncStatus])
   @@index([pendingDelete])
+  @@index([nameSort])
 }
 
 model DescriptionTemplate {

@@ -76,6 +76,8 @@ const FLAG_OPTS = [
 const SORT_OPTS = [
   { v: "recent", label: "Más recientes" },
   { v: "oldest", label: "Más antiguos" },
+  { v: "name-asc", label: "Nombre A → Z" },
+  { v: "name-desc", label: "Nombre Z → A" },
   { v: "edited", label: "Editados recientemente" },
   { v: "best-selling", label: "Más vendidos" },
   { v: "worst-selling", label: "Menos vendidos" },
