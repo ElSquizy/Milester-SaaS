@@ -4,13 +4,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { renderTemplate, sampleData, parseFields } from "@/lib/descriptionTemplates";
 import ImageComposer from "../catalog/ImageComposer";
+import TransformationsView from "./TransformationsView";
 
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
 
-export default function TemplatesClient({ templates, imageTemplates }: { templates: Tmpl[]; imageTemplates: ImgTmpl[] }) {
+export default function TemplatesClient({ templates, imageTemplates, categories }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; categories: string[] }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"desc" | "image">("desc");
+  const [mode, setMode] = useState<"desc" | "image" | "transform">("desc");
   const [selId, setSelId] = useState<number | null>(templates[0]?.id ?? null);
   const [busy, setBusy] = useState(false);
 
@@ -48,7 +49,7 @@ export default function TemplatesClient({ templates, imageTemplates }: { templat
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <h1 style={{ fontSize: "1.375rem", fontWeight: 700, margin: 0, letterSpacing: "-0.03em" }}>Plantillas</h1>
             <div style={{ display: "flex", gap: 3, background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: 3 }}>
-              {([["desc", "Descripciones"], ["image", "Imágenes"]] as const).map(([m, label]) => (
+              {([["desc", "Descripciones"], ["image", "Imágenes"], ["transform", "Transformaciones"]] as const).map(([m, label]) => (
                 <button key={m} onClick={() => setMode(m)} style={{ padding: "6px 14px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: mode === m ? 600 : 500, background: mode === m ? "var(--color-surface)" : "transparent", color: mode === m ? "var(--color-brand)" : "var(--color-subtle)", boxShadow: mode === m ? "var(--shadow-card)" : "none" }}>{label}</button>
               ))}
             </div>
@@ -83,8 +84,14 @@ export default function TemplatesClient({ templates, imageTemplates }: { templat
             <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Elegí o creá una plantilla.</div>
           )}
         </div>
-      ) : (
+      ) : mode === "image" ? (
         <ImageTemplatesView imageTemplates={imageTemplates} />
+      ) : (
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
+          <div style={{ maxWidth: 760, margin: "0 auto" }}>
+            <TransformationsView categories={categories} />
+          </div>
+        </div>
       )}
     </div>
   );

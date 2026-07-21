@@ -3,13 +3,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import type { PickedProduct } from "./CampaignExtras";
 import { useIsMobile } from "@/components/useIsMobile";
 
-type GridProduct = { id: number; name: string; sku: string | null; price: number; promotionalPrice: number | null; imageUrl: string | null; categoryName: string | null };
+type GridProduct = { id: number; name: string; sku: string | null; price: number; promotionalPrice: number | null; imageUrl: string | null; categoryName: string | null; variantCount?: number };
 
 /**
  * Centric grid modal for selecting products (like the catalog's hybrid modal).
  * Search + paginated grid of tiles with checkbox selection. Robust selection via a Map.
  */
-export default function ProductGridModal({ initial, categories, onConfirm, onClose, allowEmpty, confirmLabel, title }: {
+export default function ProductGridModal({ initial, categories, onConfirm, onClose, allowEmpty, confirmLabel, title, tileBadge, disabledReason }: {
   initial: PickedProduct[];
   categories: string[];
   onConfirm: (picked: PickedProduct[]) => void;
@@ -17,6 +17,10 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
   allowEmpty?: boolean;
   confirmLabel?: string;
   title?: string;
+  /** Optional extra label under the price (e.g. "2 variantes"). */
+  tileBadge?: (p: { variantCount?: number }) => string | null;
+  /** Non-null = the tile can't be selected; the string explains why. */
+  disabledReason?: (p: { variantCount?: number }) => string | null;
 }) {
   const isMobile = useIsMobile();
   const [q, setQ] = useState("");
@@ -48,6 +52,7 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
   }, [fetchPage]);
 
   function toggle(p: GridProduct) {
+    if (disabledReason?.(p)) return;
     setSel((prev) => {
       const next = new Map(prev);
       if (next.has(p.id)) next.delete(p.id);
@@ -103,13 +108,18 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
               {products.map((p) => {
                 const on = sel.has(p.id);
+                const disabled = disabledReason?.(p) ?? null;
+                const badge = tileBadge?.(p) ?? null;
                 return (
                   <button
                     key={p.id}
                     onClick={() => toggle(p)}
+                    title={disabled ?? undefined}
+                    aria-disabled={!!disabled}
                     style={{
-                      textAlign: "left", cursor: "pointer", padding: 0, overflow: "hidden",
+                      textAlign: "left", cursor: disabled ? "not-allowed" : "pointer", padding: 0, overflow: "hidden",
                       background: "var(--color-surface)",
+                      opacity: disabled ? 0.55 : 1,
                       border: `2px solid ${on ? "var(--color-brand)" : "var(--color-border)"}`,
                       borderRadius: 14,
                       boxShadow: on ? "0 0 0 3px var(--color-brand-ring)" : "var(--shadow-card)",
@@ -135,6 +145,11 @@ export default function ProductGridModal({ initial, categories, onConfirm, onClo
                         ${p.price.toLocaleString("es-AR")}
                         {p.promotionalPrice != null && <span style={{ color: "var(--color-success)", fontWeight: 600 }}> · oferta ${p.promotionalPrice.toLocaleString("es-AR")}</span>}
                       </div>
+                      {(badge || disabled) && (
+                        <div style={{ fontSize: "0.6875rem", marginTop: 3, fontWeight: 600, color: disabled ? "var(--color-warning)" : "var(--color-brand)" }}>
+                          {disabled ? `⚠ ${disabled}` : badge}
+                        </div>
+                      )}
                     </div>
                   </button>
                 );

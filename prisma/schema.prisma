@@ -302,3 +302,39 @@ model AiTemplate {
   updatedAt  DateTime    @updatedAt
 }
 
+
+// Transformation jobs — "Dividir por variantes" and future catalog transforms.
+// App-own data (class B): the preview/review state and the audit trail of what
+// was generated from what. Backed up by scripts/backup.mjs.
+model TransformationJob {
+  id          Int      @id @default(autoincrement())
+  type        String   // "split-variants" (extensible)
+  status      String   @default("draft") // draft | completed | partial
+  nameRule    String   // e.g. "{nombre_producto} - {nombre_variante}"
+  confirmedAt DateTime?
+  completedAt DateTime?
+  items       TransformationItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TransformationItem {
+  id               Int     @id @default(autoincrement())
+  jobId            Int
+  job              TransformationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sourceProductId  Int     // local Product id at preview time (not FK: source may be deleted later)
+  sourceName       String  // snapshot for display even if the source changes
+  sourceVariantId  Int?    // local Variant id (null if built from live TN data only)
+  variantLabel     String  // "PS4" — what the name rule interpolates
+  // Editable fields of the product-to-be (seeded from parent + variant):
+  name             String
+  price            Float
+  promotionalPrice Float?
+  stock            Int?    // null = infinite
+  sku              String?
+  // Review state:
+  status           String  @default("ready") // ready | warning | error | edited | skipped | created
+  issues           String  @default("[]")    // JSON [{level:"warning"|"error", code, message}]
+  duplicateAction  String? // when a same-name product exists: "create" | "skip"
+  targetProductId  Int?    // local Product created on confirm — the traceability link
+}

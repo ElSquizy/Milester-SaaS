@@ -19,12 +19,18 @@ export async function GET(req: Request) {
     prisma.product.count({ where }),
     prisma.product.findMany({
       where,
-      select: { id: true, name: true, sku: true, price: true, promotionalPrice: true, imageUrl: true, categoryName: true },
+      select: {
+        id: true, name: true, sku: true, price: true, promotionalPrice: true, imageUrl: true, categoryName: true,
+        _count: { select: { variants: true } },
+      },
       orderBy: { name: "asc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
   ]);
 
-  return NextResponse.json({ products, total, page, pageSize: PAGE_SIZE, hasMore: page * PAGE_SIZE < total });
+  return NextResponse.json({
+    products: products.map(({ _count, ...p }) => ({ ...p, variantCount: _count.variants })),
+    total, page, pageSize: PAGE_SIZE, hasMore: page * PAGE_SIZE < total,
+  });
 }

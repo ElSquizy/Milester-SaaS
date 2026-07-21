@@ -40,6 +40,8 @@ const backup = {
   aiProviders: await rows(`SELECT * FROM AiProvider`),
   aiTemplates: await rows(`SELECT * FROM AiTemplate`),
   changelog: await rows(`SELECT * FROM Changelog`),
+  transformationJobs: await rows(`SELECT * FROM TransformationJob`),
+  transformationItems: await rows(`SELECT * FROM TransformationItem`),
   // Tickets manuales y sus ítems (source = local; TN no los conoce)
   localOrders: await rows(`SELECT * FROM "Order" WHERE source = 'local'`),
   localOrderItems: await rows(`SELECT oi.* FROM OrderItem oi JOIN "Order" o ON o.id = oi.orderId WHERE o.source = 'local'`),
