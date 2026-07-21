@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useIsMobile } from "@/components/useIsMobile";
 
@@ -236,7 +237,14 @@ function TicketComposer({ ticket, isMobile, onClose, onSaved }: {
     onSaved();
   }
 
-  return (
+  // Portal a <body>: el tablero vive dentro de un contenedor con `.anim-up`, y
+  // ese `transform` residual (animation-fill-mode: both) crea un contexto de
+  // apilamiento y pasa a ser el bloque contenedor de los `position: fixed`.
+  // Sin el portal, el modal queda atrapado en la franja y el resto del
+  // dashboard se dibuja por encima.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div onClick={onClose} className="anim-in" style={{
       position: "fixed", inset: 0, zIndex: 400, background: "rgba(17,24,39,0.40)",
       backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
@@ -384,7 +392,8 @@ function TicketComposer({ ticket, isMobile, onClose, onSaved }: {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
