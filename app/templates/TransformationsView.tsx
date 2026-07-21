@@ -366,7 +366,10 @@ function ReviewCenter({ job, setJob, isMobile, descTemplates, imageTemplates, on
             const gWarn = gStatuses.filter((s) => s === "warning").length;
             const open = openGroup === g.sourceId;
             return (
-              <div key={g.sourceId} className="card" style={{ overflow: "hidden", padding: 0 }}>
+              // flexShrink:0 es obligatorio: el contenedor es flex-column y las
+              // tarjetas tienen overflow:hidden, lo que anula su tamaño mínimo
+              // automático — sin esto se aplastan en vez de hacer scroll.
+              <div key={g.sourceId} className="card" style={{ overflow: "hidden", padding: 0, flexShrink: 0 }}>
                 {/* Cabecera del grupo */}
                 <button onClick={() => setOpenGroup(open ? null : g.sourceId)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", padding: "12px 14px", border: "none", background: open ? "var(--color-surface-2)" : "transparent", cursor: "pointer" }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-subtle)", transform: open ? "none" : "rotate(-90deg)", transition: "transform 0.12s", flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
