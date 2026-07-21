@@ -25,6 +25,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Tienda Nube sends the merchant back here after they authorize the app. It's
+  // an inbound cross-site navigation, so it can't depend on our session cookie —
+  // gating it makes the install fail with 401 before the code is ever exchanged.
+  // Like /api/cron, this route guards itself: the OAuth `state` (CSRF) must match
+  // the one we stored, and the code is only redeemable with our client secret.
+  if (pathname === "/api/tiendanube/oauth/callback") return NextResponse.next();
+
   const password = process.env.MILESTER_PASSWORD;
   if (!password) return NextResponse.next(); // no password configured → gate disabled
 
