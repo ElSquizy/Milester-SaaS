@@ -113,11 +113,11 @@ model DescriptionTemplate {
 model ProductTemplate {
   id                    Int      @id @default(autoincrement())
   name                  String                   // "Juegos Digitales"
-  versions              String   @default("[]")  // JSON: [{ key, label, namePattern, skuSuffix }]
-  categoryIds           String   @default("[]")  // JSON number[] — colecciones heredadas
-  tags                  String   @default("[]")  // JSON string[] — tags iniciales
-  descriptionTemplateId Int?                     // FK débil (mismo enfoque que Product)
-  imageTemplateId       Int?                     // FK débil
+  versions              String   @default("[]")  // JSON: [{ key, label, namePattern, skuSuffix, descriptionTemplateId, imageTemplateId, categoryIds }]
+  categoryIds           String   @default("[]")  // LEGACY: fallback si la versión no define categoryIds propios
+  tags                  String   @default("[]")  // JSON string[] — tags iniciales (comunes a todas las versiones)
+  descriptionTemplateId Int?                     // LEGACY: fallback si la versión no define el suyo
+  imageTemplateId       Int?                     // LEGACY: fallback si la versión no define el suyo
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

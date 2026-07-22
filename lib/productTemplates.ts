@@ -20,6 +20,10 @@ export type TemplateVersion = {
   label: string;      // "PS4"
   namePattern: string; // "{nombre_base} [PS4]"
   skuSuffix: string;  // "PS4" → SKU final "BASE-PS4"; vacío = usa el base tal cual
+  // Configuración PROPIA de la versión (cada una elige la suya; null/[] = nada):
+  descriptionTemplateId: number | null;
+  imageTemplateId: number | null;
+  categoryIds: number[];
 };
 
 export function parseVersions(json: string): TemplateVersion[] {
@@ -33,6 +37,9 @@ export function parseVersions(json: string): TemplateVersion[] {
         label: String(v.label ?? v.key).trim(),
         namePattern: String(v.namePattern || `${NAME_TOKEN_BASE} [${String(v.label ?? v.key).trim()}]`),
         skuSuffix: String(v.skuSuffix ?? "").trim(),
+        descriptionTemplateId: v.descriptionTemplateId != null && !isNaN(Number(v.descriptionTemplateId)) ? Number(v.descriptionTemplateId) : null,
+        imageTemplateId: v.imageTemplateId != null && !isNaN(Number(v.imageTemplateId)) ? Number(v.imageTemplateId) : null,
+        categoryIds: Array.isArray(v.categoryIds) ? v.categoryIds.map(Number).filter((n: number) => !isNaN(n)) : [],
       }));
   } catch {
     return [];
@@ -160,23 +167,36 @@ export async function buildFromTemplate(input: BuildInput): Promise<
   }
 
   const tpl = (await prisma.productTemplate.findUnique({ where: { id: input.templateId } }))!;
-  const catIds: number[] = (() => { try { return JSON.parse(tpl.categoryIds) as number[]; } catch { return []; } })();
+  const versionByKey = new Map(parseVersions(tpl.versions).map((v) => [v.key, v]));
   const tags: string[] = (() => { try { return JSON.parse(tpl.tags) as string[]; } catch { return []; } })();
-  // Colecciones que ya no existen en el espejo no deben romper el create.
-  const validCatIds = catIds.length
-    ? (await prisma.category.findMany({ where: { id: { in: catIds } }, select: { id: true } })).map((c) => c.id)
-    : [];
 
-  // Descripción inicial: renderizada desde la plantilla de descripción de la
-  // ProductTemplate (si tiene). El campo con bind:"name" arranca con el nombre
-  // generado — igual que hace el editor del catálogo.
-  const descTpl = tpl.descriptionTemplateId
-    ? await prisma.descriptionTemplate.findUnique({ where: { id: tpl.descriptionTemplateId } })
-    : null;
+  // Cache de plantillas de descripción por id (varias versiones pueden compartir).
+  const descTplCache = new Map<number, Awaited<ReturnType<typeof prisma.descriptionTemplate.findUnique>>>();
+  const getDescTpl = async (id: number | null) => {
+    if (!id) return null;
+    if (!descTplCache.has(id)) descTplCache.set(id, await prisma.descriptionTemplate.findUnique({ where: { id } }));
+    return descTplCache.get(id) ?? null;
+  };
 
   const productImageUrl = input.productImageUrl?.trim() || null;
   const created: { id: number; name: string; sku: string }[] = [];
   for (const p of preview.planned) {
+    const v = versionByKey.get(p.versionKey);
+    // Configuración PROPIA de la versión; los campos a nivel plantilla quedan
+    // como fallback para plantillas guardadas antes de este cambio.
+    const versionCatIds = v?.categoryIds.length
+      ? v.categoryIds
+      : (() => { try { return JSON.parse(tpl.categoryIds) as number[]; } catch { return []; } })();
+    // Colecciones que ya no existen en el espejo no deben romper el create.
+    const validCatIds = versionCatIds.length
+      ? (await prisma.category.findMany({ where: { id: { in: versionCatIds } }, select: { id: true } })).map((c) => c.id)
+      : [];
+    const imageTemplateId = v?.imageTemplateId ?? tpl.imageTemplateId;
+
+    // Descripción inicial: renderizada desde la plantilla de descripción de LA
+    // VERSIÓN (si tiene). El campo con bind:"name" arranca con el nombre
+    // generado — igual que hace el editor del catálogo.
+    const descTpl = await getDescTpl(v?.descriptionTemplateId ?? tpl.descriptionTemplateId);
     let description: string | null = null;
     let descriptionData: TemplateData | null = null;
     if (descTpl) {
@@ -194,10 +214,10 @@ export async function buildFromTemplate(input: BuildInput): Promise<
         description,
         descriptionTemplateId: descTpl?.id ?? null,
         descriptionData: descriptionData ? JSON.stringify(descriptionData) : null,
-        imageTemplateId: tpl.imageTemplateId,
+        imageTemplateId,
         productImageUrl,
         // El push le sube su propia imagen (compuesta con la plantilla si hay).
-        imageDirty: !!(productImageUrl || tpl.imageTemplateId),
+        imageDirty: !!(productImageUrl || imageTemplateId),
         tags: JSON.stringify(tags),
         // La info individual (costo, precios, stock…) se completa después en el
         // editor del catálogo — arranca neutra.

@@ -15,7 +15,10 @@ type Tmpl = {
   id: number; name: string; versions: string; categoryIds: string; tags: string;
   descriptionTemplateId: number | null; imageTemplateId: number | null;
 };
-type Version = { key: string; label: string; namePattern: string; skuSuffix: string };
+type Version = {
+  key: string; label: string; namePattern: string; skuSuffix: string;
+  descriptionTemplateId?: number | null; imageTemplateId?: number | null; categoryIds?: number[];
+};
 type Planned = { versionKey: string; versionLabel: string; name: string; sku: string; skuConflict: string | null; nameExists: boolean };
 
 const parseJson = <T,>(s: string, fallback: T): T => { try { return JSON.parse(s) as T; } catch { return fallback; } };
@@ -52,14 +55,20 @@ export default function CreateFromTemplate({ isMobile, onClose, onCreated, onEdi
   const inherited = useMemo(() => {
     if (!tpl) return [];
     const parts: string[] = [];
-    const nCats = parseJson<number[]>(tpl.categoryIds, []).length;
     const tags = parseJson<string[]>(tpl.tags, []);
-    if (nCats) parts.push(`${nCats} ${nCats === 1 ? "colección" : "colecciones"}`);
     if (tags.length) parts.push(`etiquetas: ${tags.join(", ")}`);
-    if (tpl.descriptionTemplateId) parts.push("plantilla de descripción");
-    if (tpl.imageTemplateId) parts.push("plantilla de imagen");
     return parts;
   }, [tpl]);
+
+  // Resumen de la configuración PROPIA de una versión (cada una elige la suya).
+  const versionSummary = (v: Version) => {
+    const parts: string[] = [];
+    const nCats = v.categoryIds?.length ?? 0;
+    if (nCats) parts.push(`${nCats} col.`);
+    if (v.descriptionTemplateId ?? tpl?.descriptionTemplateId) parts.push("desc");
+    if (v.imageTemplateId ?? tpl?.imageTemplateId) parts.push("img");
+    return parts.join(" · ");
+  };
 
   function toggleVersion(key: string) {
     setVersionKeys((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; });
@@ -195,6 +204,7 @@ export default function CreateFromTemplate({ isMobile, onClose, onCreated, onEdi
                         <label key={v.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: `1.5px solid ${versionKeys.has(v.key) ? "var(--color-brand)" : "var(--color-border)"}`, borderRadius: "var(--radius-input)", cursor: "pointer", background: versionKeys.has(v.key) ? "var(--color-brand-light)" : "var(--color-surface)" }}>
                           <input type="checkbox" checked={versionKeys.has(v.key)} onChange={() => toggleVersion(v.key)} style={{ accentColor: "var(--color-brand)" }} />
                           <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-ink)" }}>{v.label}</span>
+                          {versionSummary(v) && <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>{versionSummary(v)}</span>}
                           <span style={{ fontSize: "0.72rem", color: "var(--color-subtle)", fontFamily: "var(--font-mono), monospace", marginLeft: "auto" }}>
                             {v.skuSuffix ? `SKU: …-${v.skuSuffix}` : "SKU: base"}
                           </span>
@@ -223,7 +233,7 @@ export default function CreateFromTemplate({ isMobile, onClose, onCreated, onEdi
                 <label style={lbl}>Imagen del producto (URL) <span style={{ fontWeight: 400, color: "var(--color-subtle)" }}>— opcional</span></label>
                 <input className="input" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://…/producto.png" style={{ marginTop: 5, fontSize: "0.8125rem" }} />
                 <p style={{ margin: "6px 0 0", fontSize: "0.72rem", color: "var(--color-subtle)" }}>
-                  Al subir a Tienda Nube, cada producto recibe su propia copia{tpl?.imageTemplateId ? ", compuesta con la plantilla de imagen de la plantilla" : ""}.
+                  Al subir a Tienda Nube, cada producto recibe su propia copia, compuesta con la plantilla de imagen de su versión si la tiene.
                 </p>
               </div>
               {inherited.length > 0 && (

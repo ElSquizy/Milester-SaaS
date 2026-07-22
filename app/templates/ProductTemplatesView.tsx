@@ -20,7 +20,16 @@ export type ProductTmpl = {
 };
 
 type Opt = { id: number; name: string };
-type Version = { key: string; label: string; namePattern: string; skuSuffix: string };
+type Version = {
+  key: string; label: string; namePattern: string; skuSuffix: string;
+  // Configuración propia de cada versión:
+  descriptionTemplateId: number | null; imageTemplateId: number | null; categoryIds: number[];
+};
+const normalizeVersion = (v: Partial<Version>): Version => ({
+  key: v.key ?? `v${Date.now()}`, label: v.label ?? "", namePattern: v.namePattern ?? `${TOKEN} []`, skuSuffix: v.skuSuffix ?? "",
+  descriptionTemplateId: v.descriptionTemplateId ?? null, imageTemplateId: v.imageTemplateId ?? null,
+  categoryIds: Array.isArray(v.categoryIds) ? v.categoryIds : [],
+});
 
 const TOKEN = "{nombre_base}";
 const parseJson = <T,>(s: string, fallback: T): T => { try { return JSON.parse(s) as T; } catch { return fallback; } };
@@ -92,19 +101,24 @@ function ProductTemplateEditor({ template, descTemplates, imageTemplates, busy, 
   busy: boolean; setBusy: (b: boolean) => void; onDelete: () => void; onSaved: () => void;
 }) {
   const [name, setName] = useState(template.name);
-  const [versions, setVersions] = useState<Version[]>(() => parseJson<Version[]>(template.versions, []));
-  const [catIds, setCatIds] = useState<Set<number>>(() => new Set(parseJson<number[]>(template.categoryIds, [])));
+  // Migración suave: si la plantilla es vieja (config a nivel plantilla), esa
+  // config se vuelca como punto de partida de cada versión que no tenga la suya.
+  const [versions, setVersions] = useState<Version[]>(() =>
+    parseJson<Partial<Version>[]>(template.versions, []).map((v) => normalizeVersion({
+      ...v,
+      descriptionTemplateId: v.descriptionTemplateId ?? template.descriptionTemplateId,
+      imageTemplateId: v.imageTemplateId ?? template.imageTemplateId,
+      categoryIds: v.categoryIds?.length ? v.categoryIds : parseJson<number[]>(template.categoryIds, []),
+    })));
   const [tags, setTags] = useState(() => parseJson<string[]>(template.tags, []).join(", "));
-  const [descId, setDescId] = useState<number | "">(template.descriptionTemplateId ?? "");
-  const [imgId, setImgId] = useState<number | "">(template.imageTemplateId ?? "");
-  const [showCats, setShowCats] = useState(false);
+  const [openVersion, setOpenVersion] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
   const patchVersion = (i: number, patch: Partial<Version>) =>
     setVersions((prev) => prev.map((v, x) => (x === i ? { ...v, ...patch } : v)));
-  const addVersion = () => setVersions((prev) => [...prev, { key: `v${Date.now()}`, label: "", namePattern: `${TOKEN} []`, skuSuffix: "" }]);
-  const removeVersion = (i: number) => setVersions((prev) => prev.filter((_, x) => x !== i));
+  const addVersion = () => setVersions((prev) => [...prev, normalizeVersion({})]);
+  const removeVersion = (i: number) => { setVersions((prev) => prev.filter((_, x) => x !== i)); setOpenVersion(null); };
 
   // Vista previa honesta con un nombre base de ejemplo.
   const sampleBase = "Resident Evil 4";
@@ -122,10 +136,12 @@ function ProductTemplateEditor({ template, descTemplates, imageTemplates, busy, 
       body: JSON.stringify({
         name,
         versions: versions.map((v) => ({ ...v, key: v.key || slug(v.label) })),
-        categoryIds: [...catIds],
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-        descriptionTemplateId: descId === "" ? null : descId,
-        imageTemplateId: imgId === "" ? null : imgId,
+        // La config vive en cada versión; los campos de nivel plantilla quedan
+        // vacíos (eran el sistema anterior y ahora solo actúan de fallback).
+        categoryIds: [],
+        descriptionTemplateId: null,
+        imageTemplateId: null,
       }),
     });
     setBusy(false);
@@ -151,19 +167,60 @@ function ProductTemplateEditor({ template, descTemplates, imageTemplates, busy, 
               <span>Versión</span><span>Patrón del nombre</span><span>Sufijo SKU</span><span />
             </div>
             {versions.map((v, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "110px 1fr 110px 30px", gap: 8, padding: "7px 10px", borderTop: "1px solid var(--color-divider)", alignItems: "center" }}>
-                <input className="input" value={v.label} placeholder="PS4" onChange={(e) => {
-                  const label = e.target.value;
-                  // Al nombrar la versión, autocompleta patrón y sufijo si estaban vacíos/derivados.
-                  patchVersion(i, {
-                    label,
-                    ...(v.namePattern === `${TOKEN} [${v.label}]` || v.namePattern === `${TOKEN} []` ? { namePattern: `${TOKEN} [${label}]` } : {}),
-                    ...(v.skuSuffix === v.label.toUpperCase().replace(/\s+/g, "") || v.skuSuffix === "" ? { skuSuffix: label.toUpperCase().replace(/\s+/g, "") } : {}),
-                  });
-                }} style={{ padding: "6px 8px", fontSize: "0.8125rem" }} />
-                <input className="input" value={v.namePattern} onChange={(e) => patchVersion(i, { namePattern: e.target.value })} style={{ padding: "6px 8px", fontSize: "0.8125rem", fontFamily: "var(--font-mono), monospace" }} />
-                <input className="input" value={v.skuSuffix} placeholder="(ninguno)" onChange={(e) => patchVersion(i, { skuSuffix: e.target.value.toUpperCase().replace(/\s+/g, "") })} style={{ padding: "6px 8px", fontSize: "0.8125rem", fontFamily: "var(--font-mono), monospace" }} />
-                <button onClick={() => removeVersion(i)} aria-label="Quitar versión" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", padding: 2 }}>✕</button>
+              <div key={i} style={{ borderTop: "1px solid var(--color-divider)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "110px 1fr 110px 30px", gap: 8, padding: "7px 10px", alignItems: "center" }}>
+                  <input className="input" value={v.label} placeholder="PS4" onChange={(e) => {
+                    const label = e.target.value;
+                    // Al nombrar la versión, autocompleta patrón y sufijo si estaban vacíos/derivados.
+                    patchVersion(i, {
+                      label,
+                      ...(v.namePattern === `${TOKEN} [${v.label}]` || v.namePattern === `${TOKEN} []` ? { namePattern: `${TOKEN} [${label}]` } : {}),
+                      ...(v.skuSuffix === v.label.toUpperCase().replace(/\s+/g, "") || v.skuSuffix === "" ? { skuSuffix: label.toUpperCase().replace(/\s+/g, "") } : {}),
+                    });
+                  }} style={{ padding: "6px 8px", fontSize: "0.8125rem" }} />
+                  <input className="input" value={v.namePattern} onChange={(e) => patchVersion(i, { namePattern: e.target.value })} style={{ padding: "6px 8px", fontSize: "0.8125rem", fontFamily: "var(--font-mono), monospace" }} />
+                  <input className="input" value={v.skuSuffix} placeholder="(ninguno)" onChange={(e) => patchVersion(i, { skuSuffix: e.target.value.toUpperCase().replace(/\s+/g, "") })} style={{ padding: "6px 8px", fontSize: "0.8125rem", fontFamily: "var(--font-mono), monospace" }} />
+                  <button onClick={() => removeVersion(i)} aria-label="Quitar versión" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", padding: 2 }}>✕</button>
+                </div>
+                {/* Configuración PROPIA de esta versión */}
+                <button onClick={() => setOpenVersion(openVersion === i ? null : i)} style={{ display: "flex", alignItems: "center", gap: 7, width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "0 10px 8px 12px" }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--color-subtle)", transform: openVersion === i ? "none" : "rotate(-90deg)", transition: "transform 0.12s", flexShrink: 0 }}><polyline points="6 9 12 15 18 9" /></svg>
+                  <span style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--color-muted)" }}>Descripción, imagen y colecciones de esta versión</span>
+                  {(() => { const n = (v.descriptionTemplateId ? 1 : 0) + (v.imageTemplateId ? 1 : 0) + v.categoryIds.length; return n > 0 ? <span className="pill pill-neutral" style={{ fontSize: "0.625rem" }}>{n}</span> : null; })()}
+                </button>
+                {openVersion === i && (
+                  <div style={{ margin: "0 10px 10px", padding: 12, borderRadius: "var(--radius-input)", background: "var(--color-surface-2)", display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <div>
+                        <label style={lbl}>Plantilla de descripción</label>
+                        <select className="input" value={v.descriptionTemplateId ?? ""} onChange={(e) => patchVersion(i, { descriptionTemplateId: e.target.value ? Number(e.target.value) : null })} style={{ marginTop: 5, background: "var(--color-surface)" }}>
+                          <option value="">Sin plantilla</option>
+                          {descTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={lbl}>Plantilla de imagen</label>
+                        <select className="input" value={v.imageTemplateId ?? ""} onChange={(e) => patchVersion(i, { imageTemplateId: e.target.value ? Number(e.target.value) : null })} style={{ marginTop: 5, background: "var(--color-surface)" }}>
+                          <option value="">Sin plantilla</option>
+                          {imageTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lbl}>Colecciones <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>· {v.categoryIds.length}</span></label>
+                      <div style={{ marginTop: 6 }}>
+                        <CollectionPicker
+                          selectedIds={new Set(v.categoryIds)}
+                          onToggle={(id) => {
+                            const n = new Set(v.categoryIds);
+                            if (n.has(id)) n.delete(id); else n.add(id);
+                            patchVersion(i, { categoryIds: [...n] });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -172,44 +229,14 @@ function ProductTemplateEditor({ template, descTemplates, imageTemplates, busy, 
           </button>
         </div>
 
-        {/* Herencia común */}
+        {/* Herencia común — lo único compartido por todas las versiones */}
         <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em" }}>
-            Herencia común · la reciben todos los productos generados
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>
-              <label style={lbl}>Plantilla de descripción</label>
-              <select className="input" value={descId} onChange={(e) => setDescId(e.target.value ? Number(e.target.value) : "")} style={{ marginTop: 5 }}>
-                <option value="">Sin plantilla</option>
-                {descTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lbl}>Plantilla de imagen</label>
-              <select className="input" value={imgId} onChange={(e) => setImgId(e.target.value ? Number(e.target.value) : "")} style={{ marginTop: 5 }}>
-                <option value="">Sin plantilla</option>
-                {imageTemplates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
+            Común a todas las versiones
           </div>
           <div>
             <label style={lbl}>Etiquetas <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>(separadas por coma)</span></label>
             <input className="input" value={tags} onChange={(e) => setTags(e.target.value)} style={{ marginTop: 5 }} />
-          </div>
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <label style={lbl}>Colecciones <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>· {catIds.size}</span></label>
-              <button onClick={() => setShowCats((v) => !v)} style={{ border: "none", background: "transparent", color: "var(--color-brand)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}>{showCats ? "Listo" : "Editar"}</button>
-            </div>
-            {showCats && (
-              <div style={{ marginTop: 6 }}>
-                <CollectionPicker
-                  selectedIds={catIds}
-                  onToggle={(id) => setCatIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
-                />
-              </div>
-            )}
           </div>
         </div>
 
