@@ -105,6 +105,23 @@ model DescriptionTemplate {
   updatedAt DateTime  @updatedAt
 }
 
+/// Plantilla de PRODUCTO: define versiones comerciales (PS4, PS5, Secundaria…)
+/// y la herencia común (colecciones, tags, plantillas de descripción/imagen).
+/// El wizard "Crear producto" del catálogo genera un producto staged
+/// independiente por cada versión seleccionada. Las versiones viven como JSON
+/// para poder agregar plataformas/tipos sin migrar el schema.
+model ProductTemplate {
+  id                    Int      @id @default(autoincrement())
+  name                  String                   // "Juegos Digitales"
+  versions              String   @default("[]")  // JSON: [{ key, label, namePattern, skuSuffix }]
+  categoryIds           String   @default("[]")  // JSON number[] — colecciones heredadas
+  tags                  String   @default("[]")  // JSON string[] — tags iniciales
+  descriptionTemplateId Int?                     // FK débil (mismo enfoque que Product)
+  imageTemplateId       Int?                     // FK débil
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 model ImageTemplate {
   id            Int       @id @default(autoincrement())
   name          String

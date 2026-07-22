@@ -72,6 +72,7 @@ async function restoreTable(table, rows, transform) {
 await restoreTable("Settings", B.settings);
 await restoreTable("DescriptionTemplate", B.descriptionTemplates);
 await restoreTable("ImageTemplate", B.imageTemplates);
+await restoreTable("ProductTemplate", B.productTemplates);
 await restoreTable("AiProvider", B.aiProviders);
 await restoreTable("AiTemplate", B.aiTemplates);
 

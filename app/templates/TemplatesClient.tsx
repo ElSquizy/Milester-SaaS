@@ -5,13 +5,14 @@ import Link from "next/link";
 import { renderTemplate, sampleData, parseFields } from "@/lib/descriptionTemplates";
 import ImageComposer from "../catalog/ImageComposer";
 import TransformationsView from "./TransformationsView";
+import ProductTemplatesView, { type ProductTmpl } from "./ProductTemplatesView";
 
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
 type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
 
-export default function TemplatesClient({ templates, imageTemplates, categories, categoryTree }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[] }) {
+export default function TemplatesClient({ templates, imageTemplates, productTemplates, categories, categoryTree }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; productTemplates: ProductTmpl[]; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[] }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"desc" | "image" | "transform">("desc");
+  const [mode, setMode] = useState<"desc" | "image" | "products" | "transform">("desc");
   const [selId, setSelId] = useState<number | null>(templates[0]?.id ?? null);
   const [busy, setBusy] = useState(false);
 
@@ -49,7 +50,7 @@ export default function TemplatesClient({ templates, imageTemplates, categories,
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <h1 style={{ fontSize: "1.375rem", fontWeight: 700, margin: 0, letterSpacing: "-0.03em" }}>Plantillas</h1>
             <div style={{ display: "flex", gap: 3, background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: 3 }}>
-              {([["desc", "Descripciones"], ["image", "Imágenes"], ["transform", "Transformaciones"]] as const).map(([m, label]) => (
+              {([["desc", "Descripciones"], ["image", "Imágenes"], ["products", "Productos"], ["transform", "Transformaciones"]] as const).map(([m, label]) => (
                 <button key={m} onClick={() => setMode(m)} style={{ padding: "6px 14px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: mode === m ? 600 : 500, background: mode === m ? "var(--color-surface)" : "transparent", color: mode === m ? "var(--color-brand)" : "var(--color-subtle)", boxShadow: mode === m ? "var(--shadow-card)" : "none" }}>{label}</button>
               ))}
             </div>
@@ -86,6 +87,12 @@ export default function TemplatesClient({ templates, imageTemplates, categories,
         </div>
       ) : mode === "image" ? (
         <ImageTemplatesView imageTemplates={imageTemplates} />
+      ) : mode === "products" ? (
+        <ProductTemplatesView
+          templates={productTemplates}
+          descTemplates={templates.map((t) => ({ id: t.id, name: t.name }))}
+          imageTemplates={imageTemplates.map((t) => ({ id: t.id, name: t.name }))}
+        />
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 28px" }}>
           <div style={{ maxWidth: 760, margin: "0 auto" }}>

@@ -37,6 +37,7 @@ const backup = {
   campaignItems: await rows(`SELECT * FROM CampaignItem`),
   descriptionTemplates: await rows(`SELECT * FROM DescriptionTemplate`),
   imageTemplates: await rows(`SELECT * FROM ImageTemplate`),
+  productTemplates: await rows(`SELECT * FROM ProductTemplate`),
   aiProviders: await rows(`SELECT * FROM AiProvider`),
   aiTemplates: await rows(`SELECT * FROM AiTemplate`),
   changelog: await rows(`SELECT * FROM Changelog`),

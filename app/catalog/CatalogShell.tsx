@@ -8,6 +8,7 @@ import ProductPanel from "./ProductPanel";
 import BulkBar from "./BulkBar";
 import ProductModal from "./ProductModal";
 import ProductContextMenu, { type MenuTarget } from "./ProductContextMenu";
+import CreateFromTemplate from "./CreateFromTemplate";
 import { useFocus } from "./useFocus";
 import { useIsMobile } from "@/components/useIsMobile";
 import CollectionFilter, { type Tri, parseTri, serializeTri } from "@/components/CollectionFilter";
@@ -127,6 +128,7 @@ export default function CatalogShell({
 
   const isMobile = useIsMobile();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [localQ, setLocalQ] = useState(currentQ);
   const [view, setView] = useState<"table" | "cards">("table");
@@ -330,6 +332,10 @@ export default function CatalogShell({
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button className="btn-primary" onClick={() => setCreateOpen(true)} style={{ padding: "8px 14px", fontSize: "0.8125rem" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              {isMobile ? "Crear" : "Crear producto"}
+            </button>
             {/* Focus chip: the working set you curate with right-click → "Agregar al foco" */}
             {(focus.count > 0 || focusActive) && (
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -573,6 +579,22 @@ export default function CatalogShell({
           />
         )}
       </div>
+
+      {/* Wizard: crear productos desde una plantilla de producto */}
+      {createOpen && (
+        <CreateFromTemplate
+          isMobile={isMobile}
+          onClose={() => setCreateOpen(false)}
+          onCreated={() => router.refresh()}
+          onEditProduct={(id) => {
+            setCreateOpen(false);
+            setAdvanced(true); // abrir directo el editor completo
+            const p = new URLSearchParams(searchParams.toString());
+            p.set("edit", String(id));
+            router.push(`${pathname}?${p.toString()}`);
+          }}
+        />
+      )}
 
       {/* Right-click context menu */}
       {menuTarget && (
