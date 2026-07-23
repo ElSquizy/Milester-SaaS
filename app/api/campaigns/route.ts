@@ -12,7 +12,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const body = await req.json();
-  const { name, discountType, discountValue, addTag, addCategoryId, scope, scopeValue, productIds, items, startDate, endDate } = body;
+  const { name, mode, discountType, discountValue, addTag, addCategoryId, scope, scopeValue, productIds, items, startDate, endDate } = body;
 
   if (!name?.trim()) return NextResponse.json({ error: "Falta el nombre" }, { status: 400 });
   const dType = ["pct", "fixed"].includes(discountType) ? discountType : "pct";
@@ -20,6 +20,9 @@ export async function POST(req: Request) {
   const campaign = await prisma.campaign.create({
     data: {
       name: name.trim(),
+      // "prices" = sistema clásico (descuentos sobre precios). "costs" = la
+      // campaña fija costUsdPromo y la tabla de franjas deriva el promocional.
+      mode: mode === "costs" ? "costs" : "prices",
       discountType: dType,
       discountValue: Number(discountValue) || 0,
       addTag: addTag?.trim() || null,
@@ -47,7 +50,14 @@ export async function POST(req: Request) {
           ]),
       )
     : undefined;
-  await buildCampaignItems(campaign.id, scope === "products" ? ids : undefined, priceMap, variantMap);
+  const costMap: Record<number, number> | undefined = Array.isArray(items)
+    ? Object.fromEntries(
+        items
+          .filter((i: { promoCostUsd?: unknown }) => i.promoCostUsd != null && !isNaN(Number(i.promoCostUsd)))
+          .map((i: { productId: number; promoCostUsd: number }) => [Number(i.productId), Number(i.promoCostUsd)]),
+      )
+    : undefined;
+  await buildCampaignItems(campaign.id, scope === "products" ? ids : undefined, priceMap, variantMap, costMap);
 
   return NextResponse.json(campaign);
 }

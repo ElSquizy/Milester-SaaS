@@ -1,4 +1,6 @@
 import { prisma } from "./prisma";
+import { getPricingConfig } from "./pricing";
+import { priceForUsd, isSecondary } from "./pricingCore";
 
 export type Scope = "all" | "category" | "tag";
 export type DiscountType = "pct" | "fixed";
@@ -183,29 +185,47 @@ export async function buildCampaignItems(
   productIds?: number[],
   explicitPrices?: Record<number, number>,
   variantPrices?: Record<number, VariantPrice[]>,
+  promoCosts?: Record<number, number>,
 ) {
   const c = await prisma.campaign.findUnique({ where: { id: campaignId } });
   if (!c) throw new Error("Campaña no encontrada");
 
   const products = productIds && productIds.length
-    ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, price: true } })
-    : await prisma.product.findMany({ where: targetingWhere(c.scope, c.scopeValue), select: { id: true, price: true } });
+    ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, price: true } })
+    : await prisma.product.findMany({ where: targetingWhere(c.scope, c.scopeValue), select: { id: true, name: true, price: true } });
+
+  // Campañas modo "costs": el precio promocional sale de la tabla de franjas
+  // (lib/pricing) a partir del costo promocional USD cargado por producto.
+  const pricingCfg = c.mode === "costs" ? await getPricingConfig() : null;
 
   await prisma.campaignItem.deleteMany({ where: { campaignId } });
+  let skippedNoPrice = 0;
   for (const p of products) {
     const vps = (variantPrices?.[p.id] || []).filter((v) => typeof v?.variantId === "number" && !isNaN(v.campaignPrice));
-    // Product-level promo: the wizard's per-product price, else the first variant's, else the discount default.
-    const explicit = explicitPrices?.[p.id];
-    const promo = explicit != null && !isNaN(explicit)
-      ? Math.max(0, Math.round(explicit * 100) / 100)
-      : vps.length
-        ? Math.max(0, Math.round(vps[0].campaignPrice * 100) / 100)
-        : discountedPrice(p.price, c.discountType as DiscountType, c.discountValue);
+    let promo: number;
+    let promoCostUsd: number | null = null;
+    if (pricingCfg) {
+      const cost = promoCosts?.[p.id];
+      if (cost == null || isNaN(cost) || cost <= 0) { skippedNoPrice++; continue; } // sin costo promo → fuera de la campaña
+      const kind = isSecondary(p.name, pricingCfg) ? "secondary" : "primary";
+      const computed = priceForUsd(cost, kind, pricingCfg);
+      if (computed == null) { skippedNoPrice++; continue; } // dólar sin cargar o costo fuera de rango
+      promo = computed;
+      promoCostUsd = cost;
+    } else {
+      // Product-level promo: the wizard's per-product price, else the first variant's, else the discount default.
+      const explicit = explicitPrices?.[p.id];
+      promo = explicit != null && !isNaN(explicit)
+        ? Math.max(0, Math.round(explicit * 100) / 100)
+        : vps.length
+          ? Math.max(0, Math.round(vps[0].campaignPrice * 100) / 100)
+          : discountedPrice(p.price, c.discountType as DiscountType, c.discountValue);
+    }
     await prisma.campaignItem.create({
-      data: { campaignId, productId: p.id, originalPrice: p.price, campaignPrice: promo, variantPrices: JSON.stringify(vps) },
+      data: { campaignId, productId: p.id, originalPrice: p.price, campaignPrice: promo, variantPrices: JSON.stringify(vps), promoCostUsd },
     });
   }
-  return { count: products.length };
+  return { count: products.length - skippedNoPrice, skippedNoPrice };
 }
 
 /**
@@ -223,8 +243,24 @@ export async function applyCampaign(campaignId: number) {
   if (c.items.length === 0) throw new Error("La campaña no tiene productos");
 
   const now = new Date();
+  // Modo "costs": recalcular el precio con la config VIGENTE (el dólar pudo
+  // moverse desde que se armó el borrador) y dejar costUsdPromo en el producto.
+  const pricingCfg = c.mode === "costs" ? await getPricingConfig() : null;
   for (const item of c.items) {
-    await applyPromo(c, item.productId, item.campaignPrice, parseVariantPrices(item.variantPrices));
+    let promo = item.campaignPrice;
+    if (pricingCfg && item.promoCostUsd != null) {
+      const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { name: true } });
+      const kind = prod && isSecondary(prod.name, pricingCfg) ? "secondary" : "primary";
+      const computed = priceForUsd(item.promoCostUsd, kind, pricingCfg);
+      if (computed != null) {
+        promo = computed;
+        if (computed !== item.campaignPrice) {
+          await prisma.campaignItem.update({ where: { id: item.id }, data: { campaignPrice: computed } });
+        }
+      }
+      await prisma.product.update({ where: { id: item.productId }, data: { costUsdPromo: item.promoCostUsd } });
+    }
+    await applyPromo(c, item.productId, promo, parseVariantPrices(item.variantPrices));
   }
 
   await prisma.campaign.update({ where: { id: campaignId }, data: { status: "active", appliedAt: now } });
@@ -238,6 +274,11 @@ export async function endCampaign(campaignId: number) {
 
   for (const item of c.items) {
     await clearPromo(c, item.productId, campaignId, parseVariantPrices(item.variantPrices).length > 0);
+    // Modo "costs": la promo del proveedor terminó — limpiar el costo promocional
+    // para que vuelva a regir solo el precio base derivado de costUsd.
+    if (c.mode === "costs" && item.promoCostUsd != null) {
+      await prisma.product.update({ where: { id: item.productId }, data: { costUsdPromo: null } });
+    }
   }
 
   // Keep CampaignItems after ending: they're the historical snapshot analytics need.

@@ -28,6 +28,7 @@ type EditProduct = {
   promotionalPrice: number | null;
   originalPrice: number;
   costUsd: number | null;
+  costUsdPromo: number | null;
   sku: string | null;
   published: boolean;
   tags: string;

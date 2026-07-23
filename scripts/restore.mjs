@@ -162,8 +162,8 @@ for (const r of B.productOwnColumns ?? []) {
     // (las tablas estaban vacías y el INSERT conserva el id del backup), así que
     // las referencias template↔producto siguen siendo válidas tal cual.
     await db.execute({
-      sql: `UPDATE Product SET costUsd = ?, descriptionTemplateId = ?, descriptionData = ?, imageTemplateId = ?, productImageUrl = ? WHERE id = ?`,
-      args: [r.costUsd ?? null, r.descriptionTemplateId ?? null, r.descriptionData ?? null, r.imageTemplateId ?? null, r.productImageUrl ?? null, newId],
+      sql: `UPDATE Product SET costUsd = ?, costUsdPromo = ?, descriptionTemplateId = ?, descriptionData = ?, imageTemplateId = ?, productImageUrl = ? WHERE id = ?`,
+      args: [r.costUsd ?? null, r.costUsdPromo ?? null, r.descriptionTemplateId ?? null, r.descriptionData ?? null, r.imageTemplateId ?? null, r.productImageUrl ?? null, newId],
     });
   }
   ownApplied++;

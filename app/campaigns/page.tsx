@@ -40,6 +40,7 @@ export type Campaign = {
   id: number;
   name: string;
   status: string;
+  mode: string; // "prices" (clásico) | "costs" (tabla de franjas)
   discountType: string;
   discountValue: number;
   addTag: string | null;

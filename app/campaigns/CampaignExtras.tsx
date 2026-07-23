@@ -67,9 +67,13 @@ type VariantInfo = { id: number; label: string; price: number; promotionalPrice:
  * ACTIVE campaigns (edit products + prices → Guardar cambios, applied live). You can add
  * products (grid), remove them, and edit each promo price.
  */
-export function ItemsPanel({ campaignId, status, categories, categoryTree, onClose, onApplied }: {
-  campaignId: number; status: string; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[]; onClose: () => void; onApplied: () => void;
+export function ItemsPanel({ campaignId, status, mode, categories, categoryTree, onClose, onApplied }: {
+  campaignId: number; status: string; mode?: string; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[]; onClose: () => void; onApplied: () => void;
 }) {
+  // Campañas modo "costs": los precios los gobierna la tabla de Precios a partir
+  // del costo promocional — acá se VEN pero no se editan (editar pisaría los
+  // valores derivados y borraría los costos guardados).
+  const isCosts = mode === "costs";
   const isMobile = useIsMobile();
   const [items, setItems] = useState<Item[]>([]);
   const [originalIds, setOriginalIds] = useState<Set<number>>(new Set());
@@ -144,6 +148,7 @@ export function ItemsPanel({ campaignId, status, categories, categoryTree, onClo
   }
 
   async function persist() {
+    if (isCosts) return; // modo costos: nada que persistir desde acá
     const currentIds = new Set(items.map((i) => i.productId));
     const addIds = items.filter((i) => !originalIds.has(i.productId)).map((i) => i.productId);
     const removeIds = [...originalIds].filter((id) => !currentIds.has(id));
@@ -201,18 +206,20 @@ export function ItemsPanel({ campaignId, status, categories, categoryTree, onClo
           <div>
             <div style={{ fontSize: "0.9375rem", fontWeight: 600 }}>{isActive ? "Editar campaña activa" : "Precios de la campaña"}</div>
             <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>
-              {items.length} productos · agregá, quitá o editá el precio promocional
+              {isCosts
+                ? `${items.length} productos · precios derivados de la tabla de Precios (solo lectura)`
+                : `${items.length} productos · agregá, quitá o editá el precio promocional`}
             </div>
           </div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
         </div>
 
-        <div style={{ padding: "10px 12px 0" }}>
+        {!isCosts && <div style={{ padding: "10px 12px 0" }}>
           <button className="btn-secondary" onClick={() => setGridOpen(true)} style={{ width: "100%", justifyContent: "center" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             Agregar / quitar productos
           </button>
-        </div>
+        </div>}
 
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
           {loading ? (
@@ -238,12 +245,12 @@ export function ItemsPanel({ campaignId, status, categories, categoryTree, onClo
                   {!(vs && vs.length) && (
                     <div style={{ position: "relative", width: 100, flexShrink: 0 }}>
                       <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
-                      <input className="input" value={it.promoPrice} onChange={(e) => setPromo(it.productId, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px" }} />
+                      <input className="input" value={it.promoPrice} disabled={isCosts} onChange={(e) => setPromo(it.productId, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px", opacity: isCosts ? 0.7 : 1 }} />
                     </div>
                   )}
-                  <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
+                  {!isCosts && <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  </button>
+                  </button>}
                 </div>
 
                 {/* Per-variant prices */}
@@ -258,7 +265,7 @@ export function ItemsPanel({ campaignId, status, categories, categoryTree, onClo
                       </div>
                       <div style={{ position: "relative", width: 100, flexShrink: 0 }}>
                         <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "0.8125rem", color: "var(--color-muted)", pointerEvents: "none" }}>$</span>
-                        <input className="input" value={vp} onChange={(e) => setVariantPrice(it.productId, v.id, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px" }} />
+                        <input className="input" value={vp} disabled={isCosts} onChange={(e) => setVariantPrice(it.productId, v.id, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px", opacity: isCosts ? 0.7 : 1 }} />
                       </div>
                     </div>
                   );

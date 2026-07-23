@@ -97,6 +97,7 @@ export type UpdateProductInput = {
   descriptionTemplateId?: number | null; descriptionData?: unknown;
   imageTemplateId?: number | null; productImageUrl?: string;
   costUsd?: number | null;
+  costUsdPromo?: number | null;
   sync?: boolean;
 };
 
@@ -107,7 +108,7 @@ export type UpdateProductInput = {
  * `sync` is set). Returns { notFound } or the updated product (+ syncError).
  */
 export async function updateProduct(idNum: number, body: UpdateProductInput) {
-  const { name, sku, description, price, promotionalPrice, stock, infiniteStock, seoTitle, seoDescription, imageUrl, published, tags, categoryIds, descriptionTemplateId, descriptionData, imageTemplateId, productImageUrl, costUsd } = body;
+  const { name, sku, description, price, promotionalPrice, stock, infiniteStock, seoTitle, seoDescription, imageUrl, published, tags, categoryIds, descriptionTemplateId, descriptionData, imageTemplateId, productImageUrl, costUsd, costUsdPromo } = body;
 
   const existing = await prisma.product.findUnique({
     where: { id: idNum },
@@ -206,6 +207,7 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
       ...(published !== undefined ? { published } : {}),
       ...(tags !== undefined ? { tags } : {}),
       ...(costUsd !== undefined ? { costUsd: costUsd === null || isNaN(Number(costUsd)) ? null : Number(costUsd) } : {}),
+      ...(costUsdPromo !== undefined ? { costUsdPromo: costUsdPromo === null || isNaN(Number(costUsdPromo)) ? null : Number(costUsdPromo) } : {}),
       ...(imageChanged ? { imageDirty: true } : {}),
       ...(hasChanges && !syncNow ? { syncStatus: "modified" } : {}),
     },

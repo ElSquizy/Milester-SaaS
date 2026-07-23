@@ -26,7 +26,8 @@ const fmtDate = (d: string | null) =>
 export default function CampaignsClient({ campaigns, categories, categoryTree, pendingCount }: Props) {
   const router = useRouter();
   const isMobile = useIsMobile();
-  const [creating, setCreating] = useState(false);
+  // null = cerrado · "choose" = modal de modo · "prices"/"costs" = wizard abierto
+  const [creating, setCreating] = useState<null | "choose" | "prices" | "costs">(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [analyticsFor, setAnalyticsFor] = useState<Campaign | null>(null);
   const [itemsFor, setItemsFor] = useState<number | null>(null);
@@ -45,7 +46,7 @@ export default function CampaignsClient({ campaigns, categories, categoryTree, p
               Descuentos programados que se activan y terminan solos.
             </p>
           </div>
-          <button className="btn-primary" onClick={() => setCreating(true)} style={{ whiteSpace: "nowrap", justifyContent: "center" }}>
+          <button className="btn-primary" onClick={() => setCreating("choose")} style={{ whiteSpace: "nowrap", justifyContent: "center" }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             Nueva campaña
           </button>
@@ -78,7 +79,7 @@ export default function CampaignsClient({ campaigns, categories, categoryTree, p
             <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", margin: "0 0 18px" }}>
               Creá una con fechas y se activa y termina sola.
             </p>
-            <button className="btn-primary" onClick={() => setCreating(true)}>Crear campaña</button>
+            <button className="btn-primary" onClick={() => setCreating("choose")}>Crear campaña</button>
           </div>
         ) : (
           <div className="anim-up delay-1" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -115,10 +116,31 @@ export default function CampaignsClient({ campaigns, categories, categoryTree, p
         )}
       </div>
 
-      {creating && (
+      {/* Modal previo: ¿la campaña setea precios (clásico) o costos (tabla de franjas)? */}
+      {creating === "choose" && (
+        <div onClick={() => setCreating(null)} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} className="anim-modal card" style={{ maxWidth: 480, width: "100%", padding: 22 }}>
+            <div style={{ fontSize: "1rem", fontWeight: 600, marginBottom: 4 }}>¿Qué va a setear esta campaña?</div>
+            <p style={{ margin: "0 0 14px", fontSize: "0.8125rem", color: "var(--color-muted)" }}>Elegí cómo se calculan los precios promocionales.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button onClick={() => setCreating("prices")} style={modeBtn}>
+                <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-ink)" }}>Precios</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>El sistema clásico: descuento % o precio directo por producto.</span>
+              </button>
+              <button onClick={() => setCreating("costs")} style={modeBtn}>
+                <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-ink)" }}>Costos</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-muted)" }}>Cargás el costo promocional USD del proveedor y la tabla de Precios calcula el promocional con tu ganancia de franja. Al terminar, todo se limpia solo.</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(creating === "prices" || creating === "costs") && (
         <CampaignWizard
-          onClose={() => setCreating(false)}
-          onCreated={() => { setCreating(false); router.refresh(); }}
+          mode={creating}
+          onClose={() => setCreating(null)}
+          onCreated={() => { setCreating(null); router.refresh(); }}
         />
       )}
 
@@ -130,6 +152,7 @@ export default function CampaignsClient({ campaigns, categories, categoryTree, p
         <ItemsPanel
           campaignId={itemsFor}
           status={campaigns.find((c) => c.id === itemsFor)?.status || "draft"}
+          mode={campaigns.find((c) => c.id === itemsFor)?.mode || "prices"}
           categories={categories}
           categoryTree={categoryTree}
           onClose={() => setItemsFor(null)}
@@ -148,7 +171,7 @@ function CampaignRow({ campaign: c, busy, isMobile, onAction, onAnalytics, onRev
 }) {
   const [hover, setHover] = useState(false);
   const scheduled = c.status === "draft" && c.startDate && new Date(c.startDate) > new Date();
-  const discountLabel = c.discountType === "pct" ? `−${c.discountValue}%` : `−$${c.discountValue.toLocaleString("es-AR")}`;
+  const discountLabel = c.mode === "costs" ? "por costos" : c.discountType === "pct" ? `−${c.discountValue}%` : `−$${c.discountValue.toLocaleString("es-AR")}`;
   const scopeLabel = c.scope === "all" ? "Todo el catálogo" : c.scope === "category" ? `Categoría: ${c.scopeValue}` : `Etiqueta: ${c.scopeValue}`;
 
   return (
@@ -338,4 +361,10 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
     </div>
   );
 }
+
+const modeBtn: React.CSSProperties = {
+  display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3, textAlign: "left",
+  padding: "13px 15px", borderRadius: "var(--radius-input)", border: "1.5px solid var(--color-border)",
+  background: "var(--color-surface)", cursor: "pointer",
+};
 

@@ -51,11 +51,11 @@ const backup = {
   customerMerges: await rows(`SELECT id, tiendaNubeId, mergedIntoId FROM Customer WHERE mergedIntoId IS NOT NULL`),
   // Columnas propias que viven DENTRO de la tabla espejo Product
   productOwnColumns: await rows(`
-    SELECT tiendaNubeId, costUsd, descriptionTemplateId, descriptionData,
+    SELECT tiendaNubeId, costUsd, costUsdPromo, descriptionTemplateId, descriptionData,
            imageTemplateId, productImageUrl
     FROM Product
     WHERE tiendaNubeId IS NOT NULL
-      AND (costUsd IS NOT NULL OR descriptionTemplateId IS NOT NULL
+      AND (costUsd IS NOT NULL OR costUsdPromo IS NOT NULL OR descriptionTemplateId IS NOT NULL
            OR descriptionData IS NOT NULL OR imageTemplateId IS NOT NULL
            OR productImageUrl IS NOT NULL)`),
   // Snapshots de costo en ítems de órdenes web (los locales ya van completos)

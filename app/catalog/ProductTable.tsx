@@ -49,6 +49,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
           <th style={{ ...th, textAlign: "left", minWidth: 200 }}>Nombre</th>
           <th style={{ ...th, textAlign: "left", minWidth: 140 }}>Categoría</th>
           <th style={{ ...th, textAlign: "right", minWidth: 96 }} title="Costo del producto en dólares. Es un dato tuyo: no se envía a Tienda Nube.">Costo USD</th>
+          <th style={{ ...th, textAlign: "right", minWidth: 96 }} title="Costo promocional en dólares (el proveedor lo puso en oferta). Vinculado al precio promocional por la tabla de Precios.">Costo USD Promo</th>
           <th style={{ ...th, textAlign: "right", minWidth: 110 }}>Precio base</th>
           <th style={{ ...th, textAlign: "right", minWidth: 120 }}>Precio promocional</th>
           <th style={{ ...th, textAlign: "right", minWidth: 70 }}>Stock</th>
@@ -121,6 +122,11 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                 <CostUsdField id={p.id} value={p.costUsd} />
               </td>
 
+              {/* Promo cost in USD — drives promotionalPrice via the pricing table */}
+              <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
+                <CostUsdField id={p.id} value={p.costUsdPromo} field="costUsdPromo" />
+              </td>
+
               {/* Base price — inline editable, gray */}
               <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>
                 <PriceField id={p.id} field="price" value={p.price} base={p.price} />
@@ -176,7 +182,7 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
             </tr>
             {isExpanded && (
               <tr>
-                <td colSpan={10} style={{ padding: 0, background: "var(--color-surface-2)", borderTop: "1px solid var(--color-divider)" }}>
+                <td colSpan={11} style={{ padding: 0, background: "var(--color-surface-2)", borderTop: "1px solid var(--color-divider)" }}>
                   <VariantRows productId={p.id} />
                 </td>
               </tr>
@@ -427,7 +433,7 @@ function PriceField({ id, field, value, base }: {
  * it, so editing it neither syncs nor marks the product dirty. Empty means "this
  * one isn't priced in dollars", which is most of the catalog's exceptions.
  */
-function CostUsdField({ id, value }: { id: number; value: number | null }) {
+function CostUsdField({ id, value, field = "costUsd" }: { id: number; value: number | null; field?: "costUsd" | "costUsdPromo" }) {
   const refresh = useDeferredRefresh();
   const [raw, setRaw] = useState(value != null ? String(value) : "");
   const [busy, setBusy] = useState(false);
@@ -442,7 +448,7 @@ function CostUsdField({ id, value }: { id: number; value: number | null }) {
     try {
       const res = await fetch(`/api/products/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ costUsd: v }),
+        body: JSON.stringify({ [field]: v }),
       });
       if (res.ok) refresh();
     } finally { setBusy(false); }

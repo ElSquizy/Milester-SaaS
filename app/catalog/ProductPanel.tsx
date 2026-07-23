@@ -20,6 +20,7 @@ type Product = {
   promotionalPrice: number | null;
   originalPrice: number;
   costUsd: number | null;
+  costUsdPromo: number | null;
   sku: string | null;
   published: boolean;
   tags: string;
@@ -53,6 +54,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
   const [promo, setPromo] = useState(product.promotionalPrice != null ? String(product.promotionalPrice) : "");
   const [sku, setSku] = useState(product.sku || "");
   const [costUsd, setCostUsd] = useState(product.costUsd == null ? "" : String(product.costUsd));
+  const [costUsdPromo, setCostUsdPromo] = useState(product.costUsdPromo == null ? "" : String(product.costUsdPromo));
   const [published, setPublished] = useState(product.published);
   const [infiniteStock, setInfiniteStock] = useState(product.infiniteStock);
   const [stock, setStock] = useState(product.stock == null ? "" : String(product.stock));
@@ -73,6 +75,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
   const parsedStock = stock.trim() === "" ? null : Math.max(0, Math.round(Number(stock)));
   const normSku = sku.trim() || null;
   const parsedCost = costUsd.trim() === "" ? null : parseFloat(costUsd.replace(",", "."));
+  const parsedCostPromo = costUsdPromo.trim() === "" ? null : parseFloat(costUsdPromo.replace(",", "."));
   const parsedTags = tagInput.split(",").map((t) => t.trim()).filter(Boolean);
 
   // TN only accepts unlimited stock at CREATE time; on an existing product the
@@ -99,6 +102,8 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
     diffs.push({ label: "SKU", from: product.sku || "—", to: normSku || "—" });
   if (!isNaN(parsedCost as number) && (parsedCost ?? null) !== (product.costUsd ?? null))
     diffs.push({ label: "Costo USD", from: product.costUsd != null ? `US$${product.costUsd}` : "—", to: parsedCost != null ? `US$${parsedCost}` : "—" });
+  if (!isNaN(parsedCostPromo as number) && (parsedCostPromo ?? null) !== (product.costUsdPromo ?? null))
+    diffs.push({ label: "Costo USD Promo", from: product.costUsdPromo != null ? `US$${product.costUsdPromo}` : "—", to: parsedCostPromo != null ? `US$${parsedCostPromo}` : "—" });
   if (published !== product.published)
     diffs.push({ label: "Visibilidad", from: product.published ? "Publicado" : "Oculto", to: published ? "Publicado" : "Oculto" });
   const addedTags = parsedTags.filter((t) => !originalTags.includes(t));
@@ -132,6 +137,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
         body: JSON.stringify({
           name, price: parsedPrice, promotionalPrice: parsedPromo, sku: normSku, published,
           costUsd: isNaN(parsedCost as number) ? undefined : parsedCost,
+          costUsdPromo: isNaN(parsedCostPromo as number) ? undefined : parsedCostPromo,
           ...(singleVariant ? { infiniteStock, stock: infiniteStock ? null : parsedStock } : {}),
           tags: JSON.stringify(parsedTags), categoryIds: [...catIds], sync,
         }),
@@ -322,6 +328,13 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
                 <div style={{ position: "relative" }}>
                   <span style={{ ...dollarStyle, color: costUsd.trim() === "" ? "var(--color-faint)" : "var(--color-muted)" }}>US$</span>
                   <input type="text" inputMode="decimal" value={costUsd} onChange={(e) => setCostUsd(e.target.value)} placeholder="—"
+                    style={{ ...inputStyle, paddingLeft: 40, fontVariantNumeric: "tabular-nums" }} />
+                </div>
+              </Field>
+              <Field label="Costo USD Promo" hint="oferta proveedor">
+                <div style={{ position: "relative" }}>
+                  <span style={{ ...dollarStyle, color: costUsdPromo.trim() === "" ? "var(--color-faint)" : "var(--color-muted)" }}>US$</span>
+                  <input type="text" inputMode="decimal" value={costUsdPromo} onChange={(e) => setCostUsdPromo(e.target.value)} placeholder="—"
                     style={{ ...inputStyle, paddingLeft: 40, fontVariantNumeric: "tabular-nums" }} />
                 </div>
               </Field>

@@ -6,6 +6,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { useIsMobile } from "@/components/useIsMobile";
+import { type PricingConfig, priceForUsd, isSecondary } from "@/lib/pricingCore";
 
 type Sel = { id: number; name: string; imageUrl: string | null; price: number };
 type VariantInfo = { id: number; label: string; price: number; promotionalPrice: number | null };
@@ -34,9 +35,15 @@ const ROUNDING_OPTS: { v: Rounding; label: string }[] = [
   { v: "99", label: "Terminar en 99" },
 ];
 
-export default function CampaignWizard({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+export default function CampaignWizard({ mode = "prices", onClose, onCreated }: { mode?: "prices" | "costs"; onClose: () => void; onCreated: () => void }) {
   const isMobile = useIsMobile();
+  const isCosts = mode === "costs";
+  const stages = isCosts ? ["Identidad y productos", "Programación", "Costos"] : STAGES;
   const [stage, setStage] = useState(0);
+  // Modo costos: costo promocional USD por producto + costUsd editable si falta.
+  const [promoCosts, setPromoCosts] = useState<Map<number, string>>(new Map());
+  const [baseCosts, setBaseCosts] = useState<Map<number, { current: number | null; edited: string }>>(new Map());
+  const [pricingCfg, setPricingCfg] = useState<PricingConfig | null>(null);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Map<number, Sel>>(new Map());
   const [tag, setTag] = useState("");
@@ -63,8 +70,27 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
 
   // When entering the price stage, seed a default price for any product without one,
   // and load which selected products have variants so they can be priced per-variant.
+  // Modo costos: al entrar al paso 3, traer la config de precios y el costUsd
+  // actual de cada producto seleccionado (editable si falta).
   useEffect(() => {
-    if (stage !== 2) return;
+    if (!isCosts || stage !== 2) return;
+    fetch("/api/pricing/config").then((r) => r.json()).then(setPricingCfg).catch(() => {});
+    (async () => {
+      const next = new Map<number, { current: number | null; edited: string }>();
+      for (const id of selected.keys()) {
+        if (baseCosts.has(id)) { next.set(id, baseCosts.get(id)!); continue; }
+        try {
+          const p = await (await fetch(`/api/products/${id}`)).json();
+          next.set(id, { current: p.costUsd ?? null, edited: p.costUsd != null ? String(p.costUsd) : "" });
+        } catch { next.set(id, { current: null, edited: "" }); }
+      }
+      setBaseCosts(next);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCosts, stage, selected]);
+
+  useEffect(() => {
+    if (isCosts || stage !== 2) return;
     setPrices((prev) => {
       const next = new Map(prev);
       selected.forEach((p) => { if (!next.has(p.id)) next.set(p.id, Math.round(p.price * 0.8)); });
@@ -133,6 +159,11 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
   }
 
   const canNext = stage === 0 ? name.trim().length > 0 && selected.size > 0 : true;
+  // Modo costos: no se puede crear hasta que cada producto tenga su costo promocional.
+  const costsReady = !isCosts || [...selected.keys()].every((id) => {
+    const c = parseFloat((promoCosts.get(id) ?? "").replace(",", "."));
+    return !isNaN(c) && c > 0;
+  });
 
   async function create() {
     setCreating(true); setError("");
@@ -149,14 +180,29 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
         addCategoryId = d.id;
       }
 
+      // Modo costos: persistir primero los costUsd cargados/corregidos desde acá
+      // (la campaña es también la puerta de entrada para completar costos).
+      if (isCosts) {
+        for (const [id, bc] of baseCosts) {
+          const v = bc.edited.trim() === "" ? null : parseFloat(bc.edited.replace(",", "."));
+          if (v != null && !isNaN(v) && v !== bc.current) {
+            await fetch(`/api/products/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ costUsd: v }) });
+          }
+        }
+      }
+
       const res = await fetch("/api/campaigns", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, scope: "products", productIds: [...selected.keys()],
+          name, mode, scope: "products", productIds: [...selected.keys()],
           addTag: tag.trim() || undefined, addCategoryId,
           startDate: start ? start.toISOString() : undefined,
           endDate: end ? end.toISOString() : undefined,
           items: [...selected.keys()].map((id) => {
+            if (isCosts) {
+              const c = parseFloat((promoCosts.get(id) ?? "").replace(",", "."));
+              return { productId: id, promoPrice: 0, promoCostUsd: isNaN(c) ? null : c };
+            }
             const vm = variantMeta.get(id);
             const vp = variantPrices.get(id);
             return {
@@ -183,11 +229,13 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
         {/* Header + stepper */}
         <div style={{ padding: isMobile ? "16px 16px" : "20px 28px", borderBottom: "1px solid var(--color-divider)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-            <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em" }}>Nueva campaña</div>
+            <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em" }}>
+              Nueva campaña {isCosts && <span className="pill pill-neutral" style={{ marginLeft: 6, verticalAlign: "middle" }}>por costos</span>}
+            </div>
             <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            {STAGES.map((s, i) => (
+            {stages.map((s, i) => (
               <div key={s} style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                 <span style={{ width: 24, height: 24, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.75rem", fontWeight: 700, background: i <= stage ? "var(--color-brand)" : "var(--color-surface-2)", color: i <= stage ? "#fff" : "var(--color-subtle)" }}>{i + 1}</span>
                 {/* On mobile only the active stage shows its label (keeps the stepper from overflowing). */}
@@ -211,8 +259,11 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
             />
           )}
           {stage === 1 && <StageSchedule start={start} end={end} setStart={setStart} setEnd={setEnd} />}
-          {stage === 2 && (
+          {stage === 2 && !isCosts && (
             <StagePrices selected={selected} prices={prices} setPrices={setPrices} variantMeta={variantMeta} variantPrices={variantPrices} setVariantPrice={setVariantPrice} bulkPct={bulkPct} setBulkPct={setBulkPct} applyMethod={applyMethod} applyRoundingOnly={applyRoundingOnly} priceMode={priceMode} setPriceMode={setPriceMode} fixedValue={fixedValue} setFixedValue={setFixedValue} rounding={rounding} setRounding={setRounding} />
+          )}
+          {stage === 2 && isCosts && (
+            <StageCosts selected={selected} promoCosts={promoCosts} setPromoCosts={setPromoCosts} baseCosts={baseCosts} setBaseCosts={setBaseCosts} cfg={pricingCfg} />
           )}
         </div>
 
@@ -223,7 +274,7 @@ export default function CampaignWizard({ onClose, onCreated }: { onClose: () => 
           {stage > 0 && <button className="btn-secondary" onClick={() => setStage(stage - 1)}>Atrás</button>}
           {stage < 2
             ? <button className="btn-primary" onClick={() => setStage(stage + 1)} disabled={!canNext}>Siguiente</button>
-            : <button className="btn-primary" onClick={create} disabled={creating}>{creating ? "Creando..." : "Crear campaña"}</button>}
+            : <button className="btn-primary" onClick={create} disabled={creating || !costsReady} title={!costsReady ? "Cargá el costo promocional de todos los productos" : undefined}>{creating ? "Creando..." : "Crear campaña"}</button>}
         </div>
       </div>
     </div>
@@ -515,6 +566,76 @@ function StagePrices({ selected, prices, setPrices, variantMeta, variantPrices, 
                   </div>
                 );
               })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── Stage 3 (modo costos): costo promocional USD por producto ── */
+function StageCosts({ selected, promoCosts, setPromoCosts, baseCosts, setBaseCosts, cfg }: {
+  selected: Map<number, Sel>;
+  promoCosts: Map<number, string>; setPromoCosts: React.Dispatch<React.SetStateAction<Map<number, string>>>;
+  baseCosts: Map<number, { current: number | null; edited: string }>;
+  setBaseCosts: React.Dispatch<React.SetStateAction<Map<number, { current: number | null; edited: string }>>>;
+  cfg: PricingConfig | null;
+}) {
+  const dollarMissing = cfg != null && !(cfg.dollar > 0);
+  return (
+    <div>
+      <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: "var(--radius-control)", background: "var(--color-brand-light)", fontSize: "0.8125rem", color: "var(--color-muted)", lineHeight: 1.5 }}>
+        Cargá el <b>costo promocional USD</b> de cada producto (la oferta del proveedor). El precio promocional lo
+        calcula la <b>tabla de Precios</b> con tu ganancia de franja, y al terminar la campaña todo se limpia solo.
+        {dollarMissing && <div style={{ color: "var(--color-danger)", fontWeight: 600, marginTop: 6 }}>⚠ No hay dólar cargado en Precios — el cálculo no puede correr. Configuralo primero.</div>}
+      </div>
+      <div className="card" style={{ overflow: "hidden" }}>
+        {[...selected.values()].map((p, i) => {
+          const bc = baseCosts.get(p.id);
+          const costMissing = bc != null && bc.current == null;
+          const raw = promoCosts.get(p.id) ?? "";
+          const cost = parseFloat(raw.replace(",", "."));
+          const computed = cfg && !isNaN(cost) && cost > 0
+            ? priceForUsd(cost, isSecondary(p.name, cfg) ? "secondary" : "primary", cfg)
+            : null;
+          return (
+            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none", flexWrap: "wrap" }}>
+              {p.imageUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={p.imageUrl} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                : <span style={{ width: 36, height: 36, borderRadius: 8, background: "var(--color-surface-2)", flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>Base ${p.price.toLocaleString("es-AR")}</div>
+              </div>
+              {/* costUsd de lista: informativo; editable si falta o está mal */}
+              <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: costMissing ? "var(--color-warning)" : "var(--color-subtle)" }}>
+                {costMissing ? "Costo USD (falta)" : "Costo USD"}
+                <div style={{ position: "relative", width: 96 }}>
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-faint)", pointerEvents: "none" }}>US$</span>
+                  <input className="input" inputMode="decimal" value={bc?.edited ?? ""} placeholder="—"
+                    onChange={(e) => setBaseCosts((prev) => { const n = new Map(prev); n.set(p.id, { current: bc?.current ?? null, edited: e.target.value }); return n; })}
+                    style={{ paddingLeft: 32, padding: "6px 8px 6px 32px", fontSize: "0.8125rem", fontVariantNumeric: "tabular-nums", borderColor: costMissing ? "var(--color-warning)" : undefined }} />
+                </div>
+              </label>
+              {/* costo promocional: el que setea esta campaña */}
+              <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-brand)" }}>
+                Costo USD Promo
+                <div style={{ position: "relative", width: 96 }}>
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-faint)", pointerEvents: "none" }}>US$</span>
+                  <input className="input" inputMode="decimal" value={raw} placeholder="0"
+                    onChange={(e) => setPromoCosts((prev) => { const n = new Map(prev); n.set(p.id, e.target.value); return n; })}
+                    style={{ paddingLeft: 32, padding: "6px 8px 6px 32px", fontSize: "0.8125rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }} />
+                </div>
+              </label>
+              {/* precio resultante (solo lectura, lo manda la tabla) */}
+              <div style={{ width: 110, textAlign: "right" }}>
+                <div style={{ fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-subtle)" }}>Promo resultante</div>
+                <div style={{ fontSize: "0.875rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: computed != null ? "var(--color-success)" : "var(--color-faint)" }}>
+                  {computed != null ? `$${computed.toLocaleString("es-AR")}` : "—"}
+                </div>
+              </div>
             </div>
           );
         })}

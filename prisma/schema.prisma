@@ -14,6 +14,7 @@ model Settings {
   clientSecret      String?  // Tienda Nube Client Secret (for OAuth)
   oauthState        String?  // CSRF state for the in-progress OAuth flow
   anthropicApiKey   String?
+  pricing           String   @default("{}") // JSON: config del módulo de precios (dólar, franjas, pila de impuestos, cuotas) — ver lib/pricing.ts
   lastChangeCheckAt DateTime? // last time we scanned TN for incoming product changes
   lastOrderSyncAt   DateTime? // last time we pulled incremental order/sales updates
   lastCampaignTickAt DateTime? // last time the campaign scheduler ran
@@ -84,6 +85,10 @@ model Product {
   // it never syncs and never marks the product dirty. Optional — most of the
   // catalog is priced in USD, but not all of it.
   costUsd        Float?
+  // Costo promocional USD (el proveedor lo puso en oferta). Vinculado al
+  // precio promocional por la tabla de franjas: sin costo promo, sin oferta.
+  // Local-only igual que costUsd. Lo setean/limpian las campañas modo "costs".
+  costUsdPromo   Float?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -159,6 +164,10 @@ model Campaign {
   id            Int            @id @default(autoincrement())
   name          String
   status        String         @default("draft")  // draft | active | ended
+  // "prices": sistema clásico — la campaña fija precios promocionales directos.
+  // "costs": la campaña fija costUsdPromo por producto y la tabla de franjas
+  // (lib/pricing) deriva el precio promocional; al finalizar limpia ambos.
+  mode          String         @default("prices") // prices | costs
   discountType  String                            // pct | fixed
   discountValue Float
   addTag        String?                           // tag to add to affected products
@@ -183,6 +192,7 @@ model CampaignItem {
   originalPrice Float    // snapshot taken when the campaign was applied, for revert
   campaignPrice Float    // product-level promo (single-variant, or the lowest-id variant)
   variantPrices String   @default("[]") // JSON [{ variantId, campaignPrice }] for multi-variant products
+  promoCostUsd  Float?   // campañas modo "costs": costo promocional USD cargado por producto
 }
 
 model Order {
