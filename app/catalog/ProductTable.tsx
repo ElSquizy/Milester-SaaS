@@ -3,6 +3,7 @@ import { useState, useEffect, Fragment } from "react";
 import type { CatalogProduct } from "./page";
 import CategoryCell from "./CategoryCell";
 import { useDeferredRefresh } from "./useDeferredRefresh";
+import { notifyPendingChanged } from "@/lib/pendingEvent";
 
 interface Props {
   products: CatalogProduct[];
@@ -156,11 +157,11 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                 <SalesCell unitsSold={p.unitsSold} lastSoldAt={p.lastSoldAt} />
               </td>
 
-              {/* Status — unified visibility + sync icons */}
-              <td style={{ ...td, paddingRight: 20 }}>
+              {/* Status — unified visibility + sync icons (both clickable) */}
+              <td style={{ ...td, paddingRight: 20 }} onClick={(e) => e.stopPropagation()}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                  <VisibilityIcon published={p.published} />
-                  <SyncIcon status={del ? "pending-delete" : p.syncStatus} lastSyncedAt={p.lastSyncedAt} />
+                  <VisibilityIcon id={p.id} published={p.published} />
+                  <SyncIcon id={p.id} status={del ? "pending-delete" : p.syncStatus} lastSyncedAt={p.lastSyncedAt} />
                   {/* Keyboard/touch path to the same actions as right-click. */}
                   <button
                     onClick={(e) => { e.stopPropagation(); onContextMenu(e, p); }}
@@ -484,76 +485,114 @@ function CostUsdField({ id, value, field = "costUsd" }: { id: number; value: num
   );
 }
 
-function IconChip({ color, title, tone = "quiet", spin, children }: {
-  color: string; title: string; tone?: "quiet" | "solid"; spin?: boolean; children: React.ReactNode;
+function IconChip({ color, title, tone = "quiet", spin, onClick, children }: {
+  color: string; title: string; tone?: "quiet" | "solid"; spin?: boolean; onClick?: () => void; children: React.ReactNode;
 }) {
   const solid = tone === "solid";
-  return (
-    <span
-      title={title}
-      role="img"
-      aria-label={title}
-      style={{
-        width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: solid ? color : "transparent",
-        color: solid ? "#fff" : color,
-      }}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={solid ? 2.2 : 2} strokeLinecap="round" strokeLinejoin="round" className={spin ? "anim-spin" : undefined}>
-        {children}
-      </svg>
-    </span>
+  const style: React.CSSProperties = {
+    width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: solid ? color : "transparent",
+    color: solid ? "#fff" : color,
+  };
+  const svg = (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={solid ? 2.2 : 2} strokeLinecap="round" strokeLinejoin="round" className={spin ? "anim-spin" : undefined}>
+      {children}
+    </svg>
   );
+  if (onClick) {
+    return (
+      <button type="button" title={title} aria-label={title} onClick={onClick}
+        onMouseEnter={(e) => { e.currentTarget.style.background = solid ? color : "var(--color-surface-2)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = solid ? color : "transparent"; }}
+        style={{ ...style, border: "none", cursor: "pointer", transition: "background 0.12s" }}>
+        {svg}
+      </button>
+    );
+  }
+  return <span title={title} role="img" aria-label={title} style={style}>{svg}</span>;
 }
 
 // Visibility is binary metadata, not a health signal — the glyph carries it and
 // the colour stays out of the way so the sync column can own the attention.
-function VisibilityIcon({ published }: { published: boolean }) {
+// Clicking it toggles published/hidden (staged: it turns "modified" until synced).
+function VisibilityIcon({ id, published }: { id: number; published: boolean }) {
+  const refresh = useDeferredRefresh();
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ published: !published }),
+      });
+      if (res.ok) { notifyPendingChanged(); refresh(); }
+    } finally { setBusy(false); }
+  }
   return published ? (
-    <IconChip color="var(--color-faint)" title="Publicado">
+    <IconChip color="var(--color-faint)" title="Publicado — clic para ocultar" onClick={toggle} spin={busy}>
       <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
     </IconChip>
   ) : (
-    <IconChip color="var(--color-muted)" title="Oculto">
+    <IconChip color="var(--color-muted)" title="Oculto — clic para publicar" onClick={toggle} spin={busy}>
       <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" />
     </IconChip>
   );
 }
 
-function SyncIcon({ status, lastSyncedAt }: { status: string; lastSyncedAt: Date | string | null }) {
+// Clicking forces a sync of this product to Tienda Nube (POST .../sync), same as
+// the right-click "Forzar sincronización". Shows a spinner while it runs.
+function SyncIcon({ id, status, lastSyncedAt }: { id: number; status: string; lastSyncedAt: Date | string | null }) {
+  const refresh = useDeferredRefresh();
+  const [busy, setBusy] = useState(false);
+  // The "synced" tooltip embeds a relative time ("hace 11m") that would differ
+  // between SSR and hydration; only add it after mount so both renders match.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  async function forceSync() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/products/${id}/sync`, { method: "POST" });
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "No se pudo sincronizar"); }
+      notifyPendingChanged();
+      refresh();
+    } finally { setBusy(false); }
+  }
   // Anything that needs the user to act gets a solid, saturated block.
-  if (status === "pending-delete") {
-    return (
-      <IconChip color="var(--color-danger)" tone="solid" title="Se eliminará al sincronizar">
-        <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-      </IconChip>
-    );
-  }
-  if (status === "error") {
-    return (
-      <IconChip color="var(--color-danger)" tone="solid" title="Error al sincronizar">
-        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-      </IconChip>
-    );
-  }
-  if (status === "syncing") {
+  if (busy || status === "syncing") {
     return (
       <IconChip color="var(--color-brand)" tone="solid" title="Sincronizando…" spin>
         <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
       </IconChip>
     );
   }
+  if (status === "pending-delete") {
+    return (
+      <IconChip color="var(--color-danger)" tone="solid" title="Se eliminará al sincronizar — clic para forzar" onClick={forceSync}>
+        <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </IconChip>
+    );
+  }
+  if (status === "error") {
+    return (
+      <IconChip color="var(--color-danger)" tone="solid" title="Error al sincronizar — clic para reintentar" onClick={forceSync}>
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+      </IconChip>
+    );
+  }
   if (status === "modified" || status === "pending") {
     return (
-      <IconChip color="var(--color-warning)" tone="solid" title="Cambios sin sincronizar">
+      <IconChip color="var(--color-warning)" tone="solid" title="Cambios sin sincronizar — clic para forzar" onClick={forceSync}>
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
       </IconChip>
     );
   }
-  // Synced is the norm: present, but it never competes for attention.
+  // Synced is the norm: present, but it never competes for attention. Still
+  // clickable — a re-push to TN when you want to be sure.
   return (
-    <IconChip color="var(--color-success-icon)" title={lastSyncedAt ? `Sincronizado ${formatDate(lastSyncedAt)}` : "Sincronizado"}>
+    <IconChip color="var(--color-success-icon)" title={`${mounted && lastSyncedAt ? `Sincronizado ${formatDate(lastSyncedAt)}` : "Sincronizado"} — clic para forzar`} onClick={forceSync}>
       <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" /><polyline points="9 15 11 17 15 12" />
     </IconChip>
   );
