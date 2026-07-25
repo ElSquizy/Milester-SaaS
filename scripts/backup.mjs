@@ -38,6 +38,7 @@ const backup = {
   descriptionTemplates: await rows(`SELECT * FROM DescriptionTemplate`),
   imageTemplates: await rows(`SELECT * FROM ImageTemplate`),
   productTemplates: await rows(`SELECT * FROM ProductTemplate`),
+  messageTemplates: await rows(`SELECT * FROM MessageTemplate`),
   aiProviders: await rows(`SELECT * FROM AiProvider`),
   aiTemplates: await rows(`SELECT * FROM AiTemplate`),
   changelog: await rows(`SELECT * FROM Changelog`),

@@ -162,6 +162,17 @@ export default function ProductTable({ products, selected, onToggle, onToggleAll
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                   <VisibilityIcon id={p.id} published={p.published} />
                   <SyncIcon id={p.id} status={del ? "pending-delete" : p.syncStatus} lastSyncedAt={p.lastSyncedAt} />
+                  {p.productUrl && (
+                    <a href={p.productUrl} target="_blank" rel="noopener noreferrer" title="Visitar producto en la tienda"
+                      aria-label="Visitar producto en la tienda"
+                      style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-subtle)", transition: "background 0.12s, color 0.12s" }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--color-surface-2)"; e.currentTarget.style.color = "var(--color-brand)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--color-subtle)"; }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
+                    </a>
+                  )}
                   {/* Keyboard/touch path to the same actions as right-click. */}
                   <button
                     onClick={(e) => { e.stopPropagation(); onContextMenu(e, p); }}

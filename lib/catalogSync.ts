@@ -19,6 +19,7 @@ export type TNProduct = {
   published?: boolean;
   requires_shipping?: boolean;
   tags?: string;
+  canonical_url?: string | null; // URL pública del producto en la tienda
 };
 
 function loc(field: Record<string, string> | null | undefined): string {
@@ -95,6 +96,7 @@ export async function upsertTnProducts(
           categoryName: tnP.categories?.[0]?.name ? loc(tnP.categories[0].name) : null,
           tags: tagsFromTnString(tnP.tags),
           requiresShipping: tnP.requires_shipping ?? null,
+          productUrl: tnP.canonical_url || null,
           stock, infiniteStock, attributes, price, sku, published,
           promotionalPrice: promo(tnP.variants?.[0]),
           syncStatus: "synced",
@@ -118,6 +120,7 @@ export async function upsertTnProducts(
           categoryName: tnP.categories?.[0]?.name ? loc(tnP.categories[0].name) : null,
           tags: tagsFromTnString(tnP.tags),
           requiresShipping: tnP.requires_shipping ?? null,
+          productUrl: tnP.canonical_url || null,
           stock, infiniteStock, attributes, sku, published,
           promotionalPrice: promo(tnP.variants?.[0]),
           syncStatus: "synced",

@@ -89,6 +89,7 @@ model Product {
   // precio promocional por la tabla de franjas: sin costo promo, sin oferta.
   // Local-only igual que costUsd. Lo setean/limpian las campañas modo "costs".
   costUsdPromo   Float?
+  productUrl     String?     // canonical_url público en TN (para "Visitar producto" y variable {url})
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -125,6 +126,17 @@ model ProductTemplate {
   imageTemplateId       Int?                     // LEGACY: fallback si la versión no define el suyo
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+/// Plantilla de mensaje para clientes (WhatsApp/Instagram): texto con variables
+/// {nombre} {precio} {url}… que se renderiza con los datos de un producto y se
+/// copia al portapapeles desde el clic derecho del catálogo. Ver lib/messageTemplates.
+model MessageTemplate {
+  id        Int      @id @default(autoincrement())
+  name      String
+  body      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ImageTemplate {

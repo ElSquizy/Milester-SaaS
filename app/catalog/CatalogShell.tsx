@@ -29,6 +29,7 @@ type EditProduct = {
   originalPrice: number;
   costUsd: number | null;
   costUsdPromo: number | null;
+  productUrl: string | null;
   sku: string | null;
   published: boolean;
   tags: string;
@@ -165,6 +166,8 @@ export default function CatalogShell({
     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
     setMenuTarget({
       id: p.id, name: p.name, pendingDelete: p.pendingDelete, syncStatus: p.syncStatus,
+      sku: p.sku, price: p.price, promotionalPrice: p.promotionalPrice, categoryName: p.categoryName,
+      stock: p.stock, infiniteStock: p.infiniteStock, productUrl: p.productUrl,
       x: fromPointer ? e.clientX : r.left,
       y: fromPointer ? e.clientY : r.bottom + 4,
     });

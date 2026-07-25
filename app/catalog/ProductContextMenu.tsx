@@ -2,8 +2,16 @@
 import { useEffect, useRef, useState } from "react";
 import { isInFocus, toggleFocus } from "./useFocus";
 import { notifyPendingChanged } from "@/lib/pendingEvent";
+import { renderMessage } from "@/lib/messageTemplates";
 
-export type MenuTarget = { id: number; name: string; pendingDelete: boolean; syncStatus: string; x: number; y: number };
+type MsgTmpl = { id: number; name: string; body: string };
+
+export type MenuTarget = {
+  id: number; name: string; pendingDelete: boolean; syncStatus: string; x: number; y: number;
+  // Datos para renderizar las plantillas de mensaje al copiar.
+  sku: string | null; price: number; promotionalPrice: number | null; categoryName: string | null;
+  stock: number | null; infiniteStock: boolean; productUrl: string | null;
+};
 
 /** Right-click context menu for a catalog product: duplicate, force-sync, discard local changes, stage/undo delete. */
 export default function ProductContextMenu({ target, onClose, onDone }: {
@@ -13,6 +21,23 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [msgTemplates, setMsgTemplates] = useState<MsgTmpl[] | null>(null);
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  // Plantillas de mensaje para el submenú "Copiar mensaje".
+  useEffect(() => {
+    fetch("/api/message-templates").then((r) => r.json()).then(setMsgTemplates).catch(() => setMsgTemplates([]));
+  }, []);
+
+  async function copyMessage(t: MsgTmpl) {
+    const text = renderMessage(t.body, {
+      name: target.name, sku: target.sku, price: target.price, promotionalPrice: target.promotionalPrice,
+      categoryName: target.categoryName, stock: target.stock, infiniteStock: target.infiniteStock, productUrl: target.productUrl,
+    });
+    try { await navigator.clipboard.writeText(text); } catch { /* clipboard bloqueado */ }
+    setCopiedId(t.id);
+    setTimeout(() => onClose(), 700);
+  }
 
   // Keyboard support: the menu is a real menu (roving focus with arrows, Home/End,
   // Escape to dismiss). Without this it was reachable by right-click only, which
@@ -114,6 +139,22 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
       <MenuItem onClick={forceSync} busy={busy === "sync"} icon={<><path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" /></>}>
         Forzar sincronización
       </MenuItem>
+
+      {/* Copiar mensaje para el cliente — una entrada por plantilla */}
+      {msgTemplates && msgTemplates.length > 0 && (
+        <>
+          <div style={{ height: 1, background: "var(--color-divider)", margin: "4px 0" }} />
+          <div style={{ padding: "4px 10px 2px", fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-subtle)" }}>Copiar mensaje</div>
+          {msgTemplates.map((t) => (
+            <MenuItem key={t.id} onClick={() => copyMessage(t)}
+              icon={copiedId === t.id
+                ? <polyline points="20 6 9 17 4 12" />
+                : <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>}>
+              {copiedId === t.id ? "¡Copiado!" : t.name}
+            </MenuItem>
+          ))}
+        </>
+      )}
 
       {hasPending && (
         <MenuItem onClick={revert} busy={busy === "revert"} icon={<><path d="M3 7v6h6" /><path d="M3.51 13a9 9 0 1 0 2.13-9.36L3 8" /></>}>
