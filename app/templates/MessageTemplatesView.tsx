@@ -102,12 +102,17 @@ function MessageEditor({ template, busy, setBusy, onDelete, onSaved }: {
           <label style={lbl}>Variables <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>— clic para insertar donde está el cursor</span></label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
             {MESSAGE_VARIABLES.map((v) => (
-              <button key={v.token} onClick={() => insertVar(v.token)} className="pill pill-neutral"
-                title={v.token} style={{ cursor: "pointer", border: "1px dashed var(--color-border)", fontFamily: "var(--font-mono), monospace", fontSize: "0.6875rem" }}>
+              <button key={v.name} onClick={() => insertVar(`{${v.name}}`)} className="pill pill-neutral"
+                title={`{${v.name}}`} style={{ cursor: "pointer", border: "1px dashed var(--color-border)", fontFamily: "var(--font-mono), monospace", fontSize: "0.6875rem" }}>
                 {v.label}
               </button>
             ))}
           </div>
+          <p style={{ margin: "8px 0 0", fontSize: "0.72rem", color: "var(--color-subtle)", lineHeight: 1.5 }}>
+            💡 Las variables de precio admiten operaciones para mostrar cuotas:{" "}
+            <code style={{ fontFamily: "var(--font-mono), monospace", background: "var(--color-surface-2)", padding: "1px 5px", borderRadius: 5 }}>{"{precio_actual / 3}"}</code>{" "}
+            divide el precio en 3. También sirven <code style={{ fontFamily: "var(--font-mono), monospace" }}>* + -</code>.
+          </p>
         </div>
         <div>
           <label style={lbl}>Mensaje</label>
