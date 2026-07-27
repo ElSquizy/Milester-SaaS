@@ -1,6 +1,5 @@
 import { prisma } from "./prisma";
-import { getPricingConfig } from "./pricing";
-import { priceForUsd, isSecondary } from "./pricingCore";
+import { getPricingSettings, priceForProduct } from "./pricing";
 
 export type Scope = "all" | "category" | "tag";
 export type DiscountType = "pct" | "fixed";
@@ -190,13 +189,14 @@ export async function buildCampaignItems(
   const c = await prisma.campaign.findUnique({ where: { id: campaignId } });
   if (!c) throw new Error("Campaña no encontrada");
 
+  const select = { id: true, name: true, price: true, categories: { select: { categoryId: true } } };
   const products = productIds && productIds.length
-    ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true, price: true } })
-    : await prisma.product.findMany({ where: targetingWhere(c.scope, c.scopeValue), select: { id: true, name: true, price: true } });
+    ? await prisma.product.findMany({ where: { id: { in: productIds } }, select })
+    : await prisma.product.findMany({ where: targetingWhere(c.scope, c.scopeValue), select });
 
   // Campañas modo "costs": el precio promocional sale de la tabla de franjas
-  // (lib/pricing) a partir del costo promocional USD cargado por producto.
-  const pricingCfg = c.mode === "costs" ? await getPricingConfig() : null;
+  // (lib/pricing) usando el PERFIL de cada producto (según sus colecciones).
+  const settings = c.mode === "costs" ? await getPricingSettings() : null;
 
   await prisma.campaignItem.deleteMany({ where: { campaignId } });
   let skippedNoPrice = 0;
@@ -204,11 +204,10 @@ export async function buildCampaignItems(
     const vps = (variantPrices?.[p.id] || []).filter((v) => typeof v?.variantId === "number" && !isNaN(v.campaignPrice));
     let promo: number;
     let promoCostUsd: number | null = null;
-    if (pricingCfg) {
+    if (settings) {
       const cost = promoCosts?.[p.id];
       if (cost == null || isNaN(cost) || cost <= 0) { skippedNoPrice++; continue; } // sin costo promo → fuera de la campaña
-      const kind = isSecondary(p.name, pricingCfg) ? "secondary" : "primary";
-      const computed = priceForUsd(cost, kind, pricingCfg);
+      const computed = priceForProduct({ name: p.name, categoryIds: p.categories.map((cc) => cc.categoryId) }, cost, settings);
       if (computed == null) { skippedNoPrice++; continue; } // dólar sin cargar o costo fuera de rango
       promo = computed;
       promoCostUsd = cost;
@@ -245,13 +244,12 @@ export async function applyCampaign(campaignId: number) {
   const now = new Date();
   // Modo "costs": recalcular el precio con la config VIGENTE (el dólar pudo
   // moverse desde que se armó el borrador) y dejar costUsdPromo en el producto.
-  const pricingCfg = c.mode === "costs" ? await getPricingConfig() : null;
+  const settings = c.mode === "costs" ? await getPricingSettings() : null;
   for (const item of c.items) {
     let promo = item.campaignPrice;
-    if (pricingCfg && item.promoCostUsd != null) {
-      const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { name: true } });
-      const kind = prod && isSecondary(prod.name, pricingCfg) ? "secondary" : "primary";
-      const computed = priceForUsd(item.promoCostUsd, kind, pricingCfg);
+    if (settings && item.promoCostUsd != null) {
+      const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { name: true, categories: { select: { categoryId: true } } } });
+      const computed = prod ? priceForProduct({ name: prod.name, categoryIds: prod.categories.map((cc) => cc.categoryId) }, item.promoCostUsd, settings) : null;
       if (computed != null) {
         promo = computed;
         if (computed !== item.campaignPrice) {

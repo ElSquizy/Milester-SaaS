@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPricingConfig, applyPricing } from "@/lib/pricing";
+import { getPricingSettings, applyPricing } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -15,8 +15,8 @@ export async function POST(req: Request) {
   if (!ids.length) return NextResponse.json({ error: "Sin productos" }, { status: 400 });
   if (ids.length > 200) return NextResponse.json({ error: "Máximo 200 por lote" }, { status: 400 });
   try {
-    const cfg = await getPricingConfig();
-    const result = await applyPricing(cfg, ids);
+    const settings = await getPricingSettings();
+    const result = await applyPricing(settings, ids);
     return NextResponse.json(result);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Error" }, { status: 500 });

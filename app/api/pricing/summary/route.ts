@@ -1,42 +1,33 @@
 import { NextResponse } from "next/server";
-import { getPricingConfig, planApply } from "@/lib/pricing";
-import { tierFor } from "@/lib/pricingCore";
-import { prisma } from "@/lib/prisma";
+import { getPricingSettings, planApply } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * GET: el diff tabla→catálogo agregado por franja + las listas de excluidos.
- * La ventana de Precios lo usa para pintar alineados/desalineados y para armar
- * el lote de ids a aplicar.
+ * GET: el diff tabla→catálogo por PERFIL y franja + las listas de excluidos.
+ * La ventana usa perProfile[profileId][tierMax] para pintar alineados/
+ * desalineados de la pestaña activa; toChange/changeIds son globales (aplicar
+ * corre sobre todo el catálogo, cada producto por su perfil).
  */
 export async function GET() {
-  const cfg = await getPricingConfig();
-  const plan = await planApply(cfg);
+  const settings = await getPricingSettings();
+  const plan = await planApply(settings);
 
-  // Franja de cada fila según su costo base (o el promo si no hay base).
-  const costs = new Map<number, { costUsd: number | null; costUsdPromo: number | null }>();
-  if (plan.rows.length) {
-    const prods = await prisma.product.findMany({
-      where: { id: { in: plan.rows.map((r) => r.productId) } },
-      select: { id: true, costUsd: true, costUsdPromo: true },
-    });
-    for (const p of prods) costs.set(p.id, { costUsd: p.costUsd, costUsdPromo: p.costUsdPromo });
-  }
-  const perTier: Record<number, { products: number; misaligned: number }> = {};
+  const perProfile: Record<string, { count: number; tiers: Record<number, { products: number; misaligned: number }> }> = {};
+  for (const p of settings.profiles) perProfile[p.id] = { count: 0, tiers: {} };
   for (const r of plan.rows) {
-    const c = costs.get(r.productId);
-    const usd = c?.costUsd ?? c?.costUsdPromo;
-    const tier = usd != null ? tierFor(usd, cfg) : null;
-    if (!tier) continue;
-    perTier[tier.maxUsd] ??= { products: 0, misaligned: 0 };
-    perTier[tier.maxUsd].products++;
-    if (r.changes) perTier[tier.maxUsd].misaligned++;
+    const prof = perProfile[r.profileId] ?? (perProfile[r.profileId] = { count: 0, tiers: {} });
+    prof.count++;
+    if (r.tierMax != null) {
+      prof.tiers[r.tierMax] ??= { products: 0, misaligned: 0 };
+      prof.tiers[r.tierMax].products++;
+      if (r.changes) prof.tiers[r.tierMax].misaligned++;
+    }
   }
 
   return NextResponse.json({
-    perTier,
+    perProfile,
     toChange: plan.toChange,
     changeIds: plan.rows.filter((r) => r.changes).map((r) => r.productId),
     unpositioned: plan.unpositioned,

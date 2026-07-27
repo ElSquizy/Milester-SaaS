@@ -6,7 +6,6 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { useIsMobile } from "@/components/useIsMobile";
-import { type PricingConfig, priceForUsd, isSecondary } from "@/lib/pricingCore";
 
 type Sel = { id: number; name: string; imageUrl: string | null; price: number };
 type VariantInfo = { id: number; label: string; price: number; promotionalPrice: number | null };
@@ -43,7 +42,10 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
   // Modo costos: costo promocional USD por producto + costUsd editable si falta.
   const [promoCosts, setPromoCosts] = useState<Map<number, string>>(new Map());
   const [baseCosts, setBaseCosts] = useState<Map<number, { current: number | null; edited: string }>>(new Map());
-  const [pricingCfg, setPricingCfg] = useState<PricingConfig | null>(null);
+  // Precio promocional resultante por producto (lo calcula el server con el
+  // perfil de precios de cada uno). dollarSet: si hay dólar cargado en Precios.
+  const [quotePrices, setQuotePrices] = useState<Map<number, number | null>>(new Map());
+  const [dollarSet, setDollarSet] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Map<number, Sel>>(new Map());
   const [tag, setTag] = useState("");
@@ -74,7 +76,7 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
   // actual de cada producto seleccionado (editable si falta).
   useEffect(() => {
     if (!isCosts || stage !== 2) return;
-    fetch("/api/pricing/config").then((r) => r.json()).then(setPricingCfg).catch(() => {});
+    fetch("/api/pricing/config").then((r) => r.json()).then((s) => setDollarSet((s?.dollar ?? 0) > 0)).catch(() => setDollarSet(false));
     (async () => {
       const next = new Map<number, { current: number | null; edited: string }>();
       for (const id of selected.keys()) {
@@ -88,6 +90,24 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCosts, stage, selected]);
+
+  // Cotización de precios promocionales (server = perfil por producto), con debounce.
+  useEffect(() => {
+    if (!isCosts || stage !== 2) return;
+    const items = [...selected.keys()].map((id) => {
+      const c = parseFloat((promoCosts.get(id) ?? "").replace(",", "."));
+      return { productId: id, costUsd: c };
+    }).filter((i) => !isNaN(i.costUsd) && i.costUsd > 0);
+    if (!items.length) { setQuotePrices(new Map()); return; }
+    const t = setTimeout(() => {
+      fetch("/api/pricing/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) })
+        .then((r) => r.json())
+        .then((d) => setQuotePrices(new Map(Object.entries(d.prices || {}).map(([k, v]) => [Number(k), v as number | null]))))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCosts, stage, promoCosts]);
 
   useEffect(() => {
     if (isCosts || stage !== 2) return;
@@ -263,7 +283,7 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
             <StagePrices selected={selected} prices={prices} setPrices={setPrices} variantMeta={variantMeta} variantPrices={variantPrices} setVariantPrice={setVariantPrice} bulkPct={bulkPct} setBulkPct={setBulkPct} applyMethod={applyMethod} applyRoundingOnly={applyRoundingOnly} priceMode={priceMode} setPriceMode={setPriceMode} fixedValue={fixedValue} setFixedValue={setFixedValue} rounding={rounding} setRounding={setRounding} />
           )}
           {stage === 2 && isCosts && (
-            <StageCosts selected={selected} promoCosts={promoCosts} setPromoCosts={setPromoCosts} baseCosts={baseCosts} setBaseCosts={setBaseCosts} cfg={pricingCfg} />
+            <StageCosts selected={selected} promoCosts={promoCosts} setPromoCosts={setPromoCosts} baseCosts={baseCosts} setBaseCosts={setBaseCosts} quotePrices={quotePrices} dollarSet={dollarSet} />
           )}
         </div>
 
@@ -575,14 +595,15 @@ function StagePrices({ selected, prices, setPrices, variantMeta, variantPrices, 
 }
 
 /* ── Stage 3 (modo costos): costo promocional USD por producto ── */
-function StageCosts({ selected, promoCosts, setPromoCosts, baseCosts, setBaseCosts, cfg }: {
+function StageCosts({ selected, promoCosts, setPromoCosts, baseCosts, setBaseCosts, quotePrices, dollarSet }: {
   selected: Map<number, Sel>;
   promoCosts: Map<number, string>; setPromoCosts: React.Dispatch<React.SetStateAction<Map<number, string>>>;
   baseCosts: Map<number, { current: number | null; edited: string }>;
   setBaseCosts: React.Dispatch<React.SetStateAction<Map<number, { current: number | null; edited: string }>>>;
-  cfg: PricingConfig | null;
+  quotePrices: Map<number, number | null>;
+  dollarSet: boolean | null;
 }) {
-  const dollarMissing = cfg != null && !(cfg.dollar > 0);
+  const dollarMissing = dollarSet === false;
   return (
     <div>
       <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: "var(--radius-control)", background: "var(--color-brand-light)", fontSize: "0.8125rem", color: "var(--color-muted)", lineHeight: 1.5 }}>
@@ -596,9 +617,7 @@ function StageCosts({ selected, promoCosts, setPromoCosts, baseCosts, setBaseCos
           const costMissing = bc != null && bc.current == null;
           const raw = promoCosts.get(p.id) ?? "";
           const cost = parseFloat(raw.replace(",", "."));
-          const computed = cfg && !isNaN(cost) && cost > 0
-            ? priceForUsd(cost, isSecondary(p.name, cfg) ? "secondary" : "primary", cfg)
-            : null;
+          const computed = !isNaN(cost) && cost > 0 ? (quotePrices.get(p.id) ?? null) : null;
           return (
             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none", flexWrap: "wrap" }}>
               {p.imageUrl

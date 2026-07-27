@@ -1,31 +1,42 @@
 import { prisma } from "./prisma";
 import {
-  type PricingConfig, parsePricingConfig, normalizeTiers, priceForUsd, isSecondary, tierFor,
+  type PricingSettings,
+  parsePricingSettings, finalizeSettings, profileForProduct, priceForUsd, isSecondary, tierFor,
 } from "./pricingCore";
 
 /**
- * Parte SERVER del módulo de precios: config en Settings.pricing (JSON) y la
- * "importación" que pisa el catálogo según la tabla de franjas.
+ * Parte SERVER del módulo de precios: config en Settings.pricing (JSON, ahora
+ * con PERFILES por colección) y la "importación" que pisa el catálogo.
  *
+ * Cada producto se precifica con el perfil de sus colecciones (o el General).
  * Doble vínculo: costUsd → price (base) · costUsdPromo → promotionalPrice.
  * Todo entra staged (syncStatus "modified") — nada toca Tienda Nube sin
  * "Subir cambios". Escrituras secuenciales (Turso HTTP no banca transacciones
  * largas).
  */
 
-export async function getPricingConfig(): Promise<PricingConfig> {
+export async function getPricingSettings(): Promise<PricingSettings> {
   const s = await prisma.settings.findFirst({ select: { pricing: true } });
-  return parsePricingConfig(s?.pricing ?? "{}");
+  return parsePricingSettings(s?.pricing ?? "{}");
 }
 
-export async function savePricingConfig(cfg: PricingConfig): Promise<PricingConfig> {
-  const clean = normalizeTiers({ ...cfg, dollarUpdatedAt: new Date().toISOString() });
+export async function savePricingSettings(input: PricingSettings): Promise<PricingSettings> {
+  const clean = finalizeSettings({ ...input, dollarUpdatedAt: new Date().toISOString() });
   if (!(clean.dollar >= 0)) throw new Error("Dólar inválido");
-  if (clean.taxes.some((t) => typeof t.value !== "number" || isNaN(t.value))) throw new Error("Hay un impuesto con valor inválido");
+  for (const p of clean.profiles) {
+    if (p.taxes.some((t) => typeof t.value !== "number" || isNaN(t.value))) throw new Error(`Hay un impuesto inválido en "${p.name}"`);
+  }
   const s = await prisma.settings.findFirst({ select: { id: true } });
   if (!s) throw new Error("Configurá la tienda primero");
   await prisma.settings.update({ where: { id: s.id }, data: { pricing: JSON.stringify(clean) } });
   return clean;
+}
+
+/** Precio para un costo USD usando el perfil que rige al producto. */
+export function priceForProduct(product: { name: string; categoryIds: number[] }, usd: number | null, s: PricingSettings): number | null {
+  if (usd == null) return null;
+  const profile = profileForProduct(product.categoryIds, s);
+  return priceForUsd(usd, isSecondary(product.name, profile) ? "secondary" : "primary", profile);
 }
 
 /* ── Planificación y aplicación ───────────────────────── */
@@ -33,6 +44,8 @@ export async function savePricingConfig(cfg: PricingConfig): Promise<PricingConf
 export type ApplyPlanRow = {
   productId: number;
   name: string;
+  profileId: string;            // perfil que rige a este producto
+  tierMax: number | null;       // franja (por su costo base, o el promo)
   kind: "primary" | "secondary";
   newPrice: number | null;      // desde costUsd (null = sin costo base → no se toca price)
   newPromo: number | null;      // desde costUsdPromo (null = limpiar promo)
@@ -43,12 +56,12 @@ export type ApplyPlan = {
   rows: ApplyPlanRow[];                        // productos con algún costo, fuera de campañas activas de precios
   toChange: number;
   unpositioned: { id: number; name: string }[]; // sin ningún costo cargado
-  outOfRange: { id: number; name: string }[];   // costo mayor que la última franja
+  outOfRange: { id: number; name: string }[];   // costo mayor que la última franja de su perfil
   inActiveCampaign: { id: number; name: string }[]; // ítems de campañas modo "prices" ACTIVAS — excluidos
 };
 
-/** Calcula el diff completo tabla→catálogo sin escribir nada. */
-export async function planApply(cfg: PricingConfig): Promise<ApplyPlan> {
+/** Calcula el diff completo tabla→catálogo sin escribir nada. Cada producto por su perfil. */
+export async function planApply(s: PricingSettings): Promise<ApplyPlan> {
   // Productos protegidos: pertenecen a una campaña de PRECIOS activa (sistema
   // clásico) — la importación no les pisa la promo viva.
   const activeItems = await prisma.campaignItem.findMany({
@@ -59,7 +72,7 @@ export async function planApply(cfg: PricingConfig): Promise<ApplyPlan> {
 
   const products = await prisma.product.findMany({
     where: { pendingDelete: false },
-    select: { id: true, name: true, costUsd: true, costUsdPromo: true, price: true, promotionalPrice: true },
+    select: { id: true, name: true, costUsd: true, costUsdPromo: true, price: true, promotionalPrice: true, categories: { select: { categoryId: true } } },
     orderBy: { id: "asc" },
   });
 
@@ -67,16 +80,18 @@ export async function planApply(cfg: PricingConfig): Promise<ApplyPlan> {
   for (const p of products) {
     if (p.costUsd == null && p.costUsdPromo == null) { plan.unpositioned.push({ id: p.id, name: p.name }); continue; }
     if (protectedIds.has(p.id)) { plan.inActiveCampaign.push({ id: p.id, name: p.name }); continue; }
-    const outOfRange = [p.costUsd, p.costUsdPromo].some((c) => c != null && c > 0 && !tierFor(c, cfg));
+    const profile = profileForProduct(p.categories.map((c) => c.categoryId), s);
+    const outOfRange = [p.costUsd, p.costUsdPromo].some((c) => c != null && c > 0 && !tierFor(c, profile));
     if (outOfRange) { plan.outOfRange.push({ id: p.id, name: p.name }); continue; }
 
-    const kind = isSecondary(p.name, cfg) ? "secondary" : "primary";
-    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, kind, cfg) : null;
-    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, kind, cfg) : null;
+    const kind = isSecondary(p.name, profile) ? "secondary" : "primary";
+    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, kind, profile) : null;
+    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, kind, profile) : null;
+    const tierMax = tierFor(p.costUsd ?? p.costUsdPromo ?? 0, profile)?.maxUsd ?? null;
     const changes =
       (newPrice != null && newPrice !== p.price) ||
       (newPromo ?? null) !== (p.promotionalPrice ?? null);
-    plan.rows.push({ productId: p.id, name: p.name, kind, newPrice, newPromo, changes });
+    plan.rows.push({ productId: p.id, name: p.name, profileId: profile.id, tierMax, kind, newPrice, newPromo, changes });
     if (changes) plan.toChange++;
   }
   return plan;
@@ -88,17 +103,18 @@ export async function planApply(cfg: PricingConfig): Promise<ApplyPlan> {
  * variantes (decisión de negocio: el precio de franja rige parejo), marca
  * "modified" y deja Changelog. Devuelve cuántos cambió.
  */
-export async function applyPricing(cfg: PricingConfig, productIds: number[]): Promise<{ changed: number; skipped: number }> {
+export async function applyPricing(s: PricingSettings, productIds: number[]): Promise<{ changed: number; skipped: number }> {
   let changed = 0, skipped = 0;
   for (const id of productIds) {
     const p = await prisma.product.findUnique({
       where: { id },
-      select: { id: true, name: true, costUsd: true, costUsdPromo: true, price: true, promotionalPrice: true, pendingDelete: true },
+      select: { id: true, name: true, costUsd: true, costUsdPromo: true, price: true, promotionalPrice: true, pendingDelete: true, categories: { select: { categoryId: true } } },
     });
     if (!p || p.pendingDelete) { skipped++; continue; }
-    const kind = isSecondary(p.name, cfg) ? "secondary" : "primary";
-    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, kind, cfg) : null;
-    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, kind, cfg) : null;
+    const profile = profileForProduct(p.categories.map((c) => c.categoryId), s);
+    const kind = isSecondary(p.name, profile) ? "secondary" : "primary";
+    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, kind, profile) : null;
+    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, kind, profile) : null;
     const priceChanges = newPrice != null && newPrice !== p.price;
     const promoChanges = (newPromo ?? null) !== (p.promotionalPrice ?? null);
     if (!priceChanges && !promoChanges) { skipped++; continue; }
