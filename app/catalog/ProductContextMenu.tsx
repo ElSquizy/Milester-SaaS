@@ -23,6 +23,7 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [msgTemplates, setMsgTemplates] = useState<MsgTmpl[] | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   // Plantillas de mensaje para el submenú "Copiar mensaje".
   useEffect(() => {
@@ -108,8 +109,11 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
   }));
 
   // Keep the menu inside the viewport.
-  const x = Math.min(target.x, (typeof window !== "undefined" ? window.innerWidth : 9999) - 220);
+  const vw = typeof window !== "undefined" ? window.innerWidth : 9999;
+  const x = Math.min(target.x, vw - 220);
   const y = Math.min(target.y, (typeof window !== "undefined" ? window.innerHeight : 9999) - 200);
+  // The message submenu opens to the right unless there's no room — then left.
+  const submenuFlipLeft = x + 210 + 216 > vw;
 
   return (
     <div
@@ -140,20 +144,34 @@ export default function ProductContextMenu({ target, onClose, onDone }: {
         Forzar sincronización
       </MenuItem>
 
-      {/* Copiar mensaje para el cliente — una entrada por plantilla */}
+      {/* Copiar mensaje — submenú lateral para que el panel no crezca con muchos mensajes */}
       {msgTemplates && msgTemplates.length > 0 && (
-        <>
-          <div style={{ height: 1, background: "var(--color-divider)", margin: "4px 0" }} />
-          <div style={{ padding: "4px 10px 2px", fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-subtle)" }}>Copiar mensaje</div>
-          {msgTemplates.map((t) => (
-            <MenuItem key={t.id} onClick={() => copyMessage(t)}
-              icon={copiedId === t.id
-                ? <polyline points="20 6 9 17 4 12" />
-                : <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>}>
-              {copiedId === t.id ? "¡Copiado!" : t.name}
-            </MenuItem>
-          ))}
-        </>
+        <div style={{ position: "relative" }} onMouseEnter={() => setCopyOpen(true)} onMouseLeave={() => setCopyOpen(false)}>
+          <button className="menu-item" role="menuitem" aria-haspopup="menu" aria-expanded={copyOpen}
+            onClick={() => setCopyOpen((o) => !o)}
+            style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", border: "none", background: "transparent", textAlign: "left", font: "inherit", color: "var(--color-ink)", cursor: "pointer" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <span style={{ flex: 1 }}>Copiar mensaje</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              {submenuFlipLeft ? <polyline points="15 18 9 12 15 6" /> : <polyline points="9 18 15 12 9 6" />}
+            </svg>
+          </button>
+          {copyOpen && (
+            <div className="menu anim-in" role="menu" aria-label="Elegí un mensaje"
+              style={{ position: "absolute", top: -6, [submenuFlipLeft ? "right" : "left"]: "100%", [submenuFlipLeft ? "marginRight" : "marginLeft"]: 4, width: 210, maxHeight: 300, overflowY: "auto", padding: 6, zIndex: 81 }}>
+              {msgTemplates.map((t) => (
+                <MenuItem key={t.id} onClick={() => copyMessage(t)}
+                  icon={copiedId === t.id
+                    ? <polyline points="20 6 9 17 4 12" />
+                    : <><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></>}>
+                  {copiedId === t.id ? "¡Copiado!" : t.name}
+                </MenuItem>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {hasPending && (
