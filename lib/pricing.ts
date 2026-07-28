@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import {
   type PricingSettings,
-  parsePricingSettings, finalizeSettings, profileForProduct, priceForUsd, isSecondary, tierFor,
+  parsePricingSettings, finalizeSettings, profileForProduct, priceForUsd, tierForProduct,
 } from "./pricingCore";
 
 /**
@@ -32,11 +32,11 @@ export async function savePricingSettings(input: PricingSettings): Promise<Prici
   return clean;
 }
 
-/** Precio para un costo USD usando el perfil que rige al producto. */
+/** Precio para un costo USD usando el perfil (por colección) y la franja (con scoping) del producto. */
 export function priceForProduct(product: { name: string; categoryIds: number[] }, usd: number | null, s: PricingSettings): number | null {
   if (usd == null) return null;
   const profile = profileForProduct(product.categoryIds, s);
-  return priceForUsd(usd, isSecondary(product.name, profile) ? "secondary" : "primary", profile);
+  return priceForUsd(usd, profile, product.categoryIds);
 }
 
 /* ── Planificación y aplicación ───────────────────────── */
@@ -45,8 +45,7 @@ export type ApplyPlanRow = {
   productId: number;
   name: string;
   profileId: string;            // perfil que rige a este producto
-  tierMax: number | null;       // franja (por su costo base, o el promo)
-  kind: "primary" | "secondary";
+  tierId: string | null;        // franja que rige (por su costo base, o el promo)
   newPrice: number | null;      // desde costUsd (null = sin costo base → no se toca price)
   newPromo: number | null;      // desde costUsdPromo (null = limpiar promo)
   changes: boolean;             // difiere de lo que el producto tiene hoy
@@ -80,18 +79,18 @@ export async function planApply(s: PricingSettings): Promise<ApplyPlan> {
   for (const p of products) {
     if (p.costUsd == null && p.costUsdPromo == null) { plan.unpositioned.push({ id: p.id, name: p.name }); continue; }
     if (protectedIds.has(p.id)) { plan.inActiveCampaign.push({ id: p.id, name: p.name }); continue; }
-    const profile = profileForProduct(p.categories.map((c) => c.categoryId), s);
-    const outOfRange = [p.costUsd, p.costUsdPromo].some((c) => c != null && c > 0 && !tierFor(c, profile));
+    const catIds = p.categories.map((c) => c.categoryId);
+    const profile = profileForProduct(catIds, s);
+    const outOfRange = [p.costUsd, p.costUsdPromo].some((c) => c != null && c > 0 && !tierForProduct(profile, c, catIds));
     if (outOfRange) { plan.outOfRange.push({ id: p.id, name: p.name }); continue; }
 
-    const kind = isSecondary(p.name, profile) ? "secondary" : "primary";
-    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, kind, profile) : null;
-    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, kind, profile) : null;
-    const tierMax = tierFor(p.costUsd ?? p.costUsdPromo ?? 0, profile)?.maxUsd ?? null;
+    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, profile, catIds) : null;
+    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, profile, catIds) : null;
+    const tierId = tierForProduct(profile, p.costUsd ?? p.costUsdPromo ?? 0, catIds)?.id ?? null;
     const changes =
       (newPrice != null && newPrice !== p.price) ||
       (newPromo ?? null) !== (p.promotionalPrice ?? null);
-    plan.rows.push({ productId: p.id, name: p.name, profileId: profile.id, tierMax, kind, newPrice, newPromo, changes });
+    plan.rows.push({ productId: p.id, name: p.name, profileId: profile.id, tierId, newPrice, newPromo, changes });
     if (changes) plan.toChange++;
   }
   return plan;
@@ -111,10 +110,10 @@ export async function applyPricing(s: PricingSettings, productIds: number[]): Pr
       select: { id: true, name: true, costUsd: true, costUsdPromo: true, price: true, promotionalPrice: true, pendingDelete: true, categories: { select: { categoryId: true } } },
     });
     if (!p || p.pendingDelete) { skipped++; continue; }
-    const profile = profileForProduct(p.categories.map((c) => c.categoryId), s);
-    const kind = isSecondary(p.name, profile) ? "secondary" : "primary";
-    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, kind, profile) : null;
-    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, kind, profile) : null;
+    const catIds = p.categories.map((c) => c.categoryId);
+    const profile = profileForProduct(catIds, s);
+    const newPrice = p.costUsd != null ? priceForUsd(p.costUsd, profile, catIds) : null;
+    const newPromo = p.costUsdPromo != null ? priceForUsd(p.costUsdPromo, profile, catIds) : null;
     const priceChanges = newPrice != null && newPrice !== p.price;
     const promoChanges = (newPromo ?? null) !== (p.promotionalPrice ?? null);
     if (!priceChanges && !promoChanges) { skipped++; continue; }

@@ -14,15 +14,15 @@ export async function GET() {
   const settings = await getPricingSettings();
   const plan = await planApply(settings);
 
-  const perProfile: Record<string, { count: number; tiers: Record<number, { products: number; misaligned: number }> }> = {};
+  const perProfile: Record<string, { count: number; tiers: Record<string, { products: number; misaligned: number }> }> = {};
   for (const p of settings.profiles) perProfile[p.id] = { count: 0, tiers: {} };
   for (const r of plan.rows) {
     const prof = perProfile[r.profileId] ?? (perProfile[r.profileId] = { count: 0, tiers: {} });
     prof.count++;
-    if (r.tierMax != null) {
-      prof.tiers[r.tierMax] ??= { products: 0, misaligned: 0 };
-      prof.tiers[r.tierMax].products++;
-      if (r.changes) prof.tiers[r.tierMax].misaligned++;
+    if (r.tierId != null) {
+      prof.tiers[r.tierId] ??= { products: 0, misaligned: 0 };
+      prof.tiers[r.tierId].products++;
+      if (r.changes) prof.tiers[r.tierId].misaligned++;
     }
   }
 
