@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
+import { buildProductWhere } from "@/lib/productFilter";
 import CatalogShell from "./CatalogShell";
 
 export const dynamic = "force-dynamic";
@@ -24,54 +24,7 @@ export default async function CatalogPage({
   const page = Math.max(1, parseInt(sp.page || "1", 10));
   const editId = sp.edit ? parseInt(sp.edit, 10) : null;
 
-  const staleDate = new Date();
-  staleDate.setDate(staleDate.getDate() - 60);
-
-  // Tri-state filters: each param is a CSV of "+value" (include) / "-value" (exclude).
-  // A bare value counts as include, so old dashboard links (?flag=no-stock) keep working.
-  const parseTri = (param: string) => {
-    const inc: string[] = [], exc: string[] = [];
-    for (const raw of param.split(",").map((s) => s.trim()).filter(Boolean)) {
-      if (raw.startsWith("-")) exc.push(raw.slice(1));
-      else inc.push(raw.startsWith("+") ? raw.slice(1) : raw);
-    }
-    return { inc, exc };
-  };
-  const statusCond = (v: string): Prisma.ProductWhereInput | null =>
-    v === "published" ? { published: true }
-    : v === "hidden" ? { published: false }
-    : v === "synced" ? { syncStatus: "synced" }
-    : v === "modified" ? { syncStatus: "modified" }
-    : v === "error" ? { syncStatus: "error" } : null;
-  const flagCond = (v: string): Prisma.ProductWhereInput | null =>
-    v === "no-image" ? { imageUrl: null }
-    : v === "no-category" ? { categoryName: null }
-    : v === "no-stock" ? { stock: { lte: 0 }, infiniteStock: false }
-    : v === "no-sku" ? { sku: null }
-    : v === "stale" ? { AND: [{ OR: [{ stock: { gt: 0 } }, { infiniteStock: true }] }, { OR: [{ lastSoldAt: null }, { lastSoldAt: { lt: staleDate } }] }] } : null;
-
-  const AND: Prisma.ProductWhereInput[] = [];
-  if (q) AND.push({ OR: [{ name: { contains: q } }, { sku: { contains: q } }] });
-
-  const st = parseTri(status);
-  const stInc = st.inc.map(statusCond).filter((c): c is Prisma.ProductWhereInput => c != null);
-  if (stInc.length) AND.push({ OR: stInc });                       // include: any of
-  for (const v of st.exc) { const c = statusCond(v); if (c) AND.push({ NOT: c }); }
-
-  const col = parseTri(category);
-  if (col.inc.length) AND.push({ categories: { some: { category: { name: { in: col.inc } } } } });
-  if (col.exc.length) AND.push({ NOT: { categories: { some: { category: { name: { in: col.exc } } } } } });
-
-  const fl = parseTri(flag);
-  for (const v of fl.inc) { const c = flagCond(v); if (c) AND.push(c); }   // include flags: all of
-  for (const v of fl.exc) { const c = flagCond(v); if (c) AND.push({ NOT: c }); }
-
-  // Focus mode: the working set lives in the browser, so its ids travel in the
-  // URL. We only ever receive ids — the products themselves are read fresh here.
-  const focusIds = (sp.focus || "").split(",").map((s) => parseInt(s, 10)).filter((n) => !isNaN(n));
-  if (focusIds.length) AND.push({ id: { in: focusIds } });
-
-  const where: Prisma.ProductWhereInput = AND.length ? { AND } : {};
+  const where = buildProductWhere({ q, status, category, flag, focus: sp.focus });
 
   // Creation-based sorts are stable: editing a product must not reshuffle the
   // list under you. Ordering by updatedAt is opt-in ("edited").

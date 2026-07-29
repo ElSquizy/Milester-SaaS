@@ -132,6 +132,7 @@ export default function CatalogShell({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectingAll, setSelectingAll] = useState(false);
   const [localQ, setLocalQ] = useState(currentQ);
   const [view, setView] = useState<"table" | "cards">("table");
   // The wide table is unusable on phones — always show cards there.
@@ -308,6 +309,17 @@ export default function CatalogShell({
 
   function clearSelected() {
     setSelected(new Set());
+    setSelectingAll(false);
+  }
+
+  // "Seleccionar todo el filtro": trae los ids de TODO lo que matchea (no solo la página).
+  async function selectAllFilter() {
+    setSelectingAll(true);
+    try {
+      const res = await fetch(`/api/products/ids?${searchParams.toString()}`);
+      const d = await res.json();
+      if (Array.isArray(d.ids)) setSelected(new Set(d.ids));
+    } finally { setSelectingAll(false); }
   }
 
   function pageUrl(p: number) {
@@ -510,6 +522,16 @@ export default function CatalogShell({
       <div style={{ flex: 1, overflow: "hidden", display: "flex" }}>
         {/* Table / cards area */}
         <div style={{ flex: 1, overflow: "auto", padding: "0" }}>
+          {/* Banner "seleccionar todo el filtro" (tipo Gmail) */}
+          {selected.size >= products.length && products.length > 0 && total > products.length && (
+            <div style={{ margin: "12px 32px 0", padding: "9px 14px", borderRadius: "var(--radius-control)", background: "var(--color-brand-light)", fontSize: "0.8125rem", color: "var(--color-brand)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+              {selected.size >= total ? (
+                <>Seleccionaste los <b>{total.toLocaleString("es-AR")}</b> productos del filtro. <button onClick={clearSelected} style={bannerLink}>Deseleccionar</button></>
+              ) : (
+                <>Seleccionaste los {products.length} de esta página. <button onClick={selectAllFilter} disabled={selectingAll} style={bannerLink}>{selectingAll ? "Seleccionando…" : `Seleccionar los ${total.toLocaleString("es-AR")} del filtro`}</button></>
+              )}
+            </div>
+          )}
           {effectiveView === "table" ? (
             <ProductTable
               products={products}
@@ -614,7 +636,6 @@ export default function CatalogShell({
         <BulkBar
           count={selected.size}
           ids={Array.from(selected)}
-          categories={categories}
           onClear={clearSelected}
           onDone={() => {
             clearSelected();
@@ -625,6 +646,11 @@ export default function CatalogShell({
     </div>
   );
 }
+
+const bannerLink: React.CSSProperties = {
+  border: "none", background: "transparent", color: "var(--color-brand)", cursor: "pointer",
+  fontSize: "0.8125rem", fontWeight: 700, textDecoration: "underline", padding: 0,
+};
 
 const pageBtnStyle = (active: boolean): React.CSSProperties => ({
   padding: "6px 11px", borderRadius: 9,

@@ -18,17 +18,17 @@ export function discountedPrice(price: number, type: DiscountType, value: number
   return Math.max(0, Math.round(next * 100) / 100);
 }
 
-function parseTags(json: string): string[] {
+export function parseTags(json: string): string[] {
   try { return JSON.parse(json); } catch { return []; }
 }
 
-function addTag(json: string, tag: string): string {
+export function addTag(json: string, tag: string): string {
   const tags = parseTags(json);
   if (!tags.includes(tag)) tags.push(tag);
   return JSON.stringify(tags);
 }
 
-function removeTag(json: string, tag: string): string {
+export function removeTag(json: string, tag: string): string {
   return JSON.stringify(parseTags(json).filter((t) => t !== tag));
 }
 

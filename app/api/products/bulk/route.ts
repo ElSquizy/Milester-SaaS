@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { duplicateProduct } from "@/lib/products";
+import { addTag, removeTag } from "@/lib/campaigns";
 import { getCreds } from "@/lib/creds";
 
 /**
- * Bulk actions update products LOCALLY and mark them as "modified".
- * Nothing is pushed to Tienda Nube here — the user syncs deliberately via /api/sync.
+ * Bulk actions update products LOCALLY and mark them "modified". Nothing is
+ * pushed to Tienda Nube here — sync is deliberate (via el ícono/clic derecho o
+ * el BulkBar, que llaman a /api/products/[id]/sync).
+ *
+ * Escrituras SECUENCIALES a propósito: el $transaction en loop falla sobre el
+ * adaptador Turso HTTP ("Unable to start a transaction in the given time")
+ * cuando el lote es grande.
  */
 export async function POST(req: Request) {
   const { ids, action, value } = await req.json();
@@ -14,87 +20,68 @@ export async function POST(req: Request) {
   try {
     let updated = 0;
 
-    if (action === "price") {
-      const { type, value: val } = value as { type: "pct" | "fixed"; value: number };
-      const products = await prisma.product.findMany({
-        where: { id: { in: ids } },
-        select: { id: true, price: true },
-      });
-
-      for (const p of products) {
-        const newPrice =
-          type === "pct" ? parseFloat((p.price * (1 + val / 100)).toFixed(2)) : val;
-        if (newPrice === p.price) continue;
-
-        await prisma.$transaction([
-          prisma.product.update({
-            where: { id: p.id },
-            data: { price: newPrice, originalPrice: newPrice, syncStatus: "modified" },
-          }),
-          prisma.changelog.create({
-            data: { productId: p.id, field: "price", oldValue: String(p.price), newValue: String(newPrice) },
-          }),
-        ]);
-        updated++;
-      }
-    }
-
     if (action === "visibility") {
       const published = value as boolean;
-      const products = await prisma.product.findMany({
-        where: { id: { in: ids }, published: { not: published } },
-        select: { id: true, published: true },
-      });
+      const products = await prisma.product.findMany({ where: { id: { in: ids }, published: { not: published } }, select: { id: true, published: true } });
       for (const p of products) {
-        await prisma.$transaction([
-          prisma.product.update({
-            where: { id: p.id },
-            data: { published, syncStatus: "modified" },
-          }),
-          prisma.changelog.create({
-            data: { productId: p.id, field: "published", oldValue: String(p.published), newValue: String(published) },
-          }),
-        ]);
+        await prisma.product.update({ where: { id: p.id }, data: { published, syncStatus: "modified" } });
+        await prisma.changelog.create({ data: { productId: p.id, field: "published", oldValue: String(p.published), newValue: String(published) } });
         updated++;
       }
     }
 
-    if (action === "category") {
-      const categoryName = value as string;
-      const products = await prisma.product.findMany({
-        where: { id: { in: ids }, categoryName: { not: categoryName } },
-        select: { id: true, categoryName: true },
-      });
+    // Colecciones REALES (ProductCategory), no el categoryName legacy.
+    if (action === "add-collection" || action === "remove-collection") {
+      const categoryIds: number[] = Array.isArray(value) ? value.map(Number).filter((n) => !isNaN(n)) : [];
+      if (!categoryIds.length) return NextResponse.json({ error: "Sin colecciones" }, { status: 400 });
+      const adding = action === "add-collection";
+      for (const productId of ids) {
+        let touched = false;
+        for (const categoryId of categoryIds) {
+          if (adding) {
+            const existing = await prisma.productCategory.findUnique({ where: { productId_categoryId: { productId, categoryId } } });
+            if (!existing) { await prisma.productCategory.create({ data: { productId, categoryId } }); touched = true; }
+          } else {
+            const r = await prisma.productCategory.deleteMany({ where: { productId, categoryId } });
+            if (r.count) touched = true;
+          }
+        }
+        if (touched) {
+          await prisma.product.update({ where: { id: productId }, data: { syncStatus: "modified" } });
+          await prisma.changelog.create({ data: { productId, field: "categories", oldValue: null, newValue: adding ? "+colección" : "−colección" } });
+          updated++;
+        }
+      }
+    }
+
+    // Etiquetas (JSON en Product.tags).
+    if (action === "add-tag" || action === "remove-tag") {
+      const tag = String(value ?? "").trim();
+      if (!tag) return NextResponse.json({ error: "Sin etiqueta" }, { status: 400 });
+      const adding = action === "add-tag";
+      const products = await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, tags: true } });
       for (const p of products) {
-        await prisma.$transaction([
-          prisma.product.update({
-            where: { id: p.id },
-            data: { categoryName, syncStatus: "modified" },
-          }),
-          prisma.changelog.create({
-            data: { productId: p.id, field: "category", oldValue: p.categoryName, newValue: categoryName },
-          }),
-        ]);
+        const next = adding ? addTag(p.tags, tag) : removeTag(p.tags, tag);
+        if (next === p.tags) continue;
+        await prisma.product.update({ where: { id: p.id }, data: { tags: next, syncStatus: "modified" } });
+        await prisma.changelog.create({ data: { productId: p.id, field: "tags", oldValue: p.tags, newValue: next } });
         updated++;
       }
     }
 
-    // Duplicate each selected product into a staged local copy (created on TN at next sync).
+    // Duplicar cada seleccionado en una copia local staged (se crea en TN al sincronizar).
     if (action === "duplicate") {
       const creds = (await getCreds()) ?? undefined;
-      for (const id of ids) {
-        await duplicateProduct(id, creds);
-        updated++;
-      }
+      for (const id of ids) { await duplicateProduct(id, creds); updated++; }
     }
 
-    // Stage the selected products for deletion (applied to TN + local at next sync).
+    // Marcar para eliminar (se aplica a TN + local al sincronizar).
     if (action === "stage-delete") {
       const r = await prisma.product.updateMany({ where: { id: { in: ids } }, data: { pendingDelete: true } });
       updated = r.count;
     }
 
-    // Undo a staged deletion.
+    // Deshacer eliminación staged.
     if (action === "restore") {
       const r = await prisma.product.updateMany({ where: { id: { in: ids } }, data: { pendingDelete: false } });
       updated = r.count;
