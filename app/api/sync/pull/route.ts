@@ -20,19 +20,21 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const last = settings.lastPullAt?.getTime() ?? 0;
   if (!body.force && Date.now() - last < THROTTLE_MS) {
-    return NextResponse.json({ skipped: true, lastPullAt: settings.lastPullAt });
+    return NextResponse.json({ skipped: true, lastPullAt: settings.lastPullAt, tnApiError: settings.tnApiError ?? null });
   }
 
   try {
     const summary = await pullFromTiendaNube(settings.storeId, settings.accessToken, { full: !!body.full });
-    return NextResponse.json({ ...summary, lastPullAt: new Date() });
+    // pullFromTiendaNube may have recorded/cleared the health flag — re-read it.
+    const fresh = await prisma.settings.findFirst({ select: { tnApiError: true } });
+    return NextResponse.json({ ...summary, lastPullAt: new Date(), tnApiError: fresh?.tnApiError ?? null });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Error" }, { status: 500 });
   }
 }
 
-/** GET: last successful pull time. */
+/** GET: last successful pull time and the TN API health flag. */
 export async function GET() {
   const settings = await prisma.settings.findFirst();
-  return NextResponse.json({ lastPullAt: settings?.lastPullAt ?? null });
+  return NextResponse.json({ lastPullAt: settings?.lastPullAt ?? null, tnApiError: settings?.tnApiError ?? null });
 }

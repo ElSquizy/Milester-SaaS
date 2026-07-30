@@ -144,6 +144,7 @@ export default function Sidebar() {
   // What the last push actually did, shown as a dismissible recap when it ends.
   const [summary, setSummary] = useState<SyncSummaryItem[] | null>(null);
   const [lastPull, setLastPull] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<"unauthorized" | "payment_required" | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false); // desktop: hide the sidebar
   const esRef = useRef<EventSource | null>(null);
@@ -170,6 +171,7 @@ export default function Sidebar() {
       const res = await fetch("/api/sync/pull", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const d = await res.json().catch(() => ({}));
       if (d.lastPullAt) setLastPull(d.lastPullAt);
+      if ("tnApiError" in d) setApiError(d.tnApiError ?? null);
       if (!d.skipped) router.refresh();
     } catch { /* ignore */ } finally {
       setPulling(false);
@@ -376,6 +378,31 @@ export default function Sidebar() {
 
       {/* Sync footer: OUTBOUND push (SaaS → TN). Inbound pull runs automatically. */}
       <div style={{ padding: "10px 12px", borderTop: "1px solid var(--color-divider)" }}>
+        {/* Milester falla en silencio si TN revoca el token (401) o la suscripción
+            queda impaga (402). El pull registra el estado y acá lo mostramos. */}
+        {apiError && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 10, padding: "10px 11px", borderRadius: "var(--radius-control)",
+              border: "1px solid var(--color-danger)", background: "var(--color-danger-bg)",
+              color: "var(--color-danger)", fontSize: "0.75rem", lineHeight: 1.35,
+            }}
+          >
+            {apiError === "payment_required" ? (
+              <span style={{ fontWeight: 600 }}>
+                La suscripción de Tienda Nube está impaga; la API no responde.
+              </span>
+            ) : (
+              <>
+                <span style={{ fontWeight: 600 }}>Se perdió la conexión con Tienda Nube.</span>{" "}
+                <Link href="/settings" style={{ color: "var(--color-danger)", fontWeight: 700, textDecoration: "underline" }}>
+                  Reconectá en Configuración.
+                </Link>
+              </>
+            )}
+          </div>
+        )}
         <button
           onClick={() => runPush()}
           disabled={push.active || pending === 0}

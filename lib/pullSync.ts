@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { syncCatalogFromTiendaNube } from "./catalogSync";
 import { syncOrdersIncremental } from "./salesSync";
 import { tickCampaigns } from "./campaignScheduler";
+import { recordTnError, clearTnError } from "./tnHealth";
 
 export type PullSummary = {
   collections: number;
@@ -32,19 +33,25 @@ export async function pullFromTiendaNube(
     ranAt: new Date().toISOString(),
   };
 
+  let apiDown = false;
   try {
     const c = await syncCatalogFromTiendaNube(storeId, accessToken, opts);
     summary.collections = c.collections;
     summary.catalog = { created: c.created, updated: c.updated, skipped: c.skipped, deleted: c.deleted };
   } catch (err) {
+    if (await recordTnError(err)) apiDown = true;
     summary.errors.push(`Catálogo: ${err instanceof Error ? err.message : "error"}`);
   }
 
   try {
     summary.sales = await syncOrdersIncremental(storeId, accessToken, opts);
   } catch (err) {
+    if (await recordTnError(err)) apiDown = true;
     summary.errors.push(`Ventas: ${err instanceof Error ? err.message : "error"}`);
   }
+
+  // Corrió sin 401/402 → la API está sana; limpiar el estado de error.
+  if (!apiDown) await clearTnError();
 
   try {
     summary.campaigns = await tickCampaigns({ storeId, accessToken });
