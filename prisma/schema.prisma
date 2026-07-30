@@ -15,6 +15,8 @@ model Settings {
   oauthState        String?  // CSRF state for the in-progress OAuth flow
   anthropicApiKey   String?
   pricing           String   @default("{}") // JSON: config del módulo de precios (dólar, franjas, pila de impuestos, cuotas) — ver lib/pricing.ts
+  tnApiError        String?  // null = ok · "unauthorized" (401) · "payment_required" (402) — ver lib/tnHealth
+  tnApiErrorAt      DateTime?
   lastChangeCheckAt DateTime? // last time we scanned TN for incoming product changes
   lastOrderSyncAt   DateTime? // last time we pulled incremental order/sales updates
   lastCampaignTickAt DateTime? // last time the campaign scheduler ran
@@ -269,6 +271,7 @@ model Customer {
   name           String
   email          String?
   phone          String?
+  phoneE164      String?  // teléfono normalizado a E.164 (derivado de phone) — ver lib/phoneAR
   identification String?  // DNI / CUIT — strongest dedup key
   customerType   String?  // person | business
   businessName   String?

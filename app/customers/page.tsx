@@ -62,7 +62,7 @@ export default async function CustomersPage({
     prisma.customer.findMany({
       where,
       select: {
-        id: true, name: true, email: true, phone: true,
+        id: true, name: true, email: true, phone: true, phoneE164: true,
         identification: true, customerType: true, city: true, province: true,
         _count: { select: { orders: true } },
       },
@@ -76,7 +76,7 @@ export default async function CustomersPage({
   const totalMap = new Map(totalsByCustomer.map((t) => [t.customerId, t._sum.total || 0]));
 
   const list = customers.map((c) => ({
-    id: c.id, name: c.name, email: c.email, phone: c.phone,
+    id: c.id, name: c.name, email: c.email, phone: c.phone, phoneE164: c.phoneE164,
     identification: c.identification, customerType: c.customerType,
     city: c.city, province: c.province,
     orderCount: c._count.orders,
@@ -99,7 +99,7 @@ export default async function CustomersPage({
 }
 
 export type CustomerRow = {
-  id: number; name: string; email: string | null; phone: string | null;
+  id: number; name: string; email: string | null; phone: string | null; phoneE164: string | null;
   identification: string | null; customerType: string | null;
   city: string | null; province: string | null;
   orderCount: number; totalSpent: number; isDuplicate: boolean; strongDuplicate: boolean;

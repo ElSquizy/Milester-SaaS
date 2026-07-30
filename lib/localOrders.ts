@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { normalizePhoneAR } from "@/lib/phoneAR";
 
 /**
  * Manual sales ("pedido de bar"): orders taken outside the web store — WhatsApp,
@@ -102,7 +103,7 @@ async function resolveCustomer(input?: TicketCustomerInput) {
   if (exact) return prisma.customer.findUnique({ where: { id: exact.id } });
 
   return prisma.customer.create({
-    data: { name: name || email || phone || "Sin nombre", email, phone, tiendaNubeId: null },
+    data: { name: name || email || phone || "Sin nombre", email, phone, phoneE164: normalizePhoneAR(phone).e164, tiendaNubeId: null },
   });
 }
 

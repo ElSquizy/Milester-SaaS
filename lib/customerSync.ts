@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { getTiendaNubeClient } from "./tiendanube";
 import { mapCustomerFields } from "./orderMap";
+import { normalizePhoneAR } from "./phoneAR";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -33,7 +34,7 @@ export async function syncCustomersFromTiendaNube(storeId: string, accessToken: 
     if (!c?.id) continue;
     const tnId = String(c.id);
     const fields = mapCustomerFields(c);
-    const base = { name: c.name || "(sin nombre)", email: c.email || null, phone: c.phone || null, ...fields };
+    const base = { name: c.name || "(sin nombre)", email: c.email || null, phone: c.phone || null, phoneE164: normalizePhoneAR(c.phone).e164, ...fields };
     const existing = await prisma.customer.findUnique({ where: { tiendaNubeId: tnId }, select: { id: true } });
     await prisma.customer.upsert({
       where: { tiendaNubeId: tnId },
