@@ -164,9 +164,12 @@ export default async function HomePage() {
         {/* KPIs — mes en curso vs mes anterior */}
         {hasSales && (
           <div className="anim-up delay-1" style={{ marginBottom: 40 }}>
-            <h2 style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "0 0 12px" }}>
-              Rendimiento del mes
-            </h2>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "0 0 12px" }}>
+              <h2 style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: 0 }}>
+                Rendimiento del mes
+              </h2>
+              <Link href="/metrics" style={widgetLink}>Ver métricas →</Link>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
               {kpis.map((k) => (
                 <div key={k.label} className="card" style={{ padding: "18px 20px" }}>
