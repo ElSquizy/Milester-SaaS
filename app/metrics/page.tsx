@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { getMetrics, resolveRange } from "@/lib/metrics";
+import { getMetrics, getProjection, getInsights, resolveRange } from "@/lib/metrics";
 import MetricsClient from "./MetricsClient";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +15,12 @@ export default async function MetricsPage({
 
   const sp = await searchParams;
   const range = resolveRange(sp.range, sp.from, sp.to);
-  const data = await getMetrics(range);
+  const [data, projection, insights] = await Promise.all([
+    getMetrics(range),
+    getProjection(),
+    getInsights(),
+  ]);
 
-  // Serializar Date → string para el client component.
   return (
     <MetricsClient
       preset={range.preset}
@@ -29,6 +32,8 @@ export default async function MetricsPage({
       series={data.series}
       topProducts={data.topProducts}
       bySource={data.bySource}
+      projection={projection}
+      insights={insights}
     />
   );
 }

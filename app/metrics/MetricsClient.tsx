@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
-import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals } from "@/lib/metrics";
+import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals, type Projection, type Insights } from "@/lib/metrics";
 
 // Paleta para el desglose por canal — el resto del sistema es mono-brand.
 const BRAND = "var(--color-brand)";
@@ -43,10 +43,11 @@ function delta(cur: number, prev: number): number | null {
 const H2: React.CSSProperties = { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "0 0 12px" };
 
 export default function MetricsClient({
-  preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource,
+  preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource, projection, insights,
 }: {
   preset: Preset; fromDay: string; toDay: string; granularity: Granularity;
   current: Totals; previous: Totals; series: SeriesPoint[]; topProducts: TopProduct[]; bySource: SourceSlice[];
+  projection: Projection; insights: Insights;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -154,6 +155,9 @@ export default function MetricsClient({
           ))}
         </div>
 
+        {/* Proyección de cierre de mes (independiente del filtro) */}
+        <ProjectionCard p={projection} />
+
         {empty ? (
           <div className="card anim-up delay-2" style={{ padding: "56px 24px", textAlign: "center" }}>
             <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-ink)", marginBottom: 4 }}>Sin ventas en este período</div>
@@ -259,6 +263,146 @@ export default function MetricsClient({
             </div>
           </>
         )}
+
+        {/* Insights y sugerencias de promos (Fase 2) */}
+        <InsightsSection insights={insights} />
+      </div>
+    </div>
+  );
+}
+
+function ProjectionCard({ p }: { p: Projection }) {
+  const confColor = p.confidence === "alta" ? "var(--color-success)" : p.confidence === "media" ? "var(--color-warning)" : "var(--color-subtle)";
+  const pct = Math.min(100, Math.round((p.daysElapsed / p.daysInMonth) * 100));
+  return (
+    <div className="anim-up delay-1" style={{ marginBottom: 28 }}>
+      <h2 style={H2}>Proyección de cierre — {p.monthLabel}</h2>
+      <div className="card" style={{ padding: "20px 22px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20, alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-muted)", marginBottom: 6 }}>Facturación proyectada</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: "1.75rem", fontWeight: 700, letterSpacing: "-0.03em", color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
+              {money(p.projectedRevenue)}
+            </span>
+            {p.deltaVsLastMonth != null && (
+              <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: p.deltaVsLastMonth > 0 ? "var(--color-success)" : p.deltaVsLastMonth < 0 ? "var(--color-danger)" : "var(--color-subtle)" }}>
+                {p.deltaVsLastMonth > 0 ? "▲" : p.deltaVsLastMonth < 0 ? "▼" : "→"} {Math.abs(p.deltaVsLastMonth)}% vs. mes pasado
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-faint)", marginTop: 6 }}>
+            ~{num(p.projectedOrders)} pedidos · confianza <span style={{ color: confColor, fontWeight: 600 }}>{p.confidence}</span>
+          </div>
+        </div>
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--color-subtle)", marginBottom: 6 }}>
+            <span>Va {money(p.mtdRevenue)} · {num(p.mtdOrders)} ped.</span>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>día {Math.max(1, Math.ceil(p.daysElapsed))}/{p.daysInMonth}</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 999, background: "var(--color-surface-2)", overflow: "hidden" }}>
+            <div style={{ width: `${pct}%`, height: "100%", background: "var(--color-brand)", borderRadius: 999 }} />
+          </div>
+          <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)", marginTop: 6 }}>
+            Estimado por ritmo de venta del mes. {p.confidence === "baja" && "Con pocos días transcurridos es solo orientativo."}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsightsSection({ insights }: { insights: Insights }) {
+  const { promoCandidates, risers, fallers, weekdays, bestWeekday } = insights;
+  const maxWd = Math.max(1, ...weekdays.map((w) => w.revenue));
+  const nothing = promoCandidates.length === 0 && risers.length === 0 && fallers.length === 0 && !bestWeekday;
+  if (nothing) return null;
+
+  return (
+    <div className="anim-up delay-3" style={{ marginTop: 40 }}>
+      <h2 style={{ ...H2, marginBottom: 4 }}>Sugerencias</h2>
+      <p style={{ fontSize: "0.8125rem", color: "var(--color-subtle)", margin: "0 0 16px" }}>
+        Señales de los últimos 30–90 días para decidir promos y reposición.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18 }}>
+
+        {/* Candidatos a promo */}
+        {promoCandidates.length > 0 && (
+          <InsightCard
+            title="Candidatos a promo"
+            hint="Stock con capital inmovilizado y sin ventas hace 45+ días."
+          >
+            {promoCandidates.map((p, i) => (
+              <Row key={i}
+                name={p.name}
+                sub={`${num(p.stock)} u. · ${p.lastSoldDays == null ? "nunca vendido" : `hace ${p.lastSoldDays} d`}`}
+                right={money(p.frozenValue)} rightSub="inmovilizado" tone="warning" />
+            ))}
+          </InsightCard>
+        )}
+
+        {/* En baja — reactivar */}
+        {fallers.length > 0 && (
+          <InsightCard title="Se están enfriando" hint="Cayeron vs. los 30 días previos — una promo puede reactivarlos.">
+            {fallers.map((m, i) => (
+              <Row key={i} name={m.name} sub={`${num(m.prior)} → ${num(m.recent)} u.`}
+                right={m.changePct == null ? "—" : `${m.changePct}%`} rightSub="30d" tone="danger" />
+            ))}
+          </InsightCard>
+        )}
+
+        {/* En alza — asegurar stock */}
+        {risers.length > 0 && (
+          <InsightCard title="Vienen creciendo" hint="Suben vs. los 30 días previos — asegurá stock.">
+            {risers.map((m, i) => (
+              <Row key={i} name={m.name} sub={`${num(m.prior)} → ${num(m.recent)} u.`}
+                right={m.changePct == null ? "▲" : `+${m.changePct}%`} rightSub="30d" tone="success" />
+            ))}
+          </InsightCard>
+        )}
+
+        {/* Mejor día */}
+        {bestWeekday && (
+          <InsightCard title="Día más fuerte" hint={`Facturación por día de semana (últimos 90 días). ${bestWeekday.label} es el mejor: buen momento para lanzar promos.`}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, padding: "4px 2px" }}>
+              {weekdays.map((w) => (
+                <div key={w.weekday} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ width: 34, fontSize: "0.6875rem", color: "var(--color-subtle)", flexShrink: 0 }}>{w.label.slice(0, 3)}</span>
+                  <div style={{ flex: 1, height: 8, background: "var(--color-surface-2)", borderRadius: 999, overflow: "hidden" }}>
+                    <div style={{ width: `${Math.round((w.revenue / maxWd) * 100)}%`, height: "100%", borderRadius: 999, background: w.weekday === bestWeekday.weekday ? "var(--color-brand)" : "var(--color-faint)" }} />
+                  </div>
+                  <span style={{ width: 52, textAlign: "right", fontSize: "0.6875rem", color: "var(--color-muted)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{moneyShort(w.revenue)}</span>
+                </div>
+              ))}
+            </div>
+          </InsightCard>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function InsightCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-ink)", marginBottom: 3 }}>{title}</div>
+      <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginBottom: 14, lineHeight: 1.4 }}>{hint}</div>
+      <div style={{ display: "flex", flexDirection: "column" }}>{children}</div>
+    </div>
+  );
+}
+
+function Row({ name, sub, right, rightSub, tone }: { name: string; sub: string; right: string; rightSub: string; tone: "success" | "danger" | "warning" }) {
+  const color = tone === "success" ? "var(--color-success)" : tone === "danger" ? "var(--color-danger)" : "var(--color-warning)";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid var(--color-divider)" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+        <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 1, fontVariantNumeric: "tabular-nums" }}>{sub}</div>
+      </div>
+      <div style={{ textAlign: "right", flexShrink: 0 }}>
+        <div style={{ fontSize: "0.8125rem", fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{right}</div>
+        <div style={{ fontSize: "0.625rem", color: "var(--color-faint)" }}>{rightSub}</div>
       </div>
     </div>
   );
