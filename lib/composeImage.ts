@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { LAYOUT } from "./imageTemplates";
+import { LAYOUT, DEFAULT_PRODUCT_SLOT, type ProductSlot } from "./imageTemplates";
 
 const CANVAS = LAYOUT.canvas; // 1024
 const T = { r: 0, g: 0, b: 0, alpha: 0 }; // transparent
@@ -20,11 +20,11 @@ async function fetchBuffer(url: string): Promise<Buffer> {
  * the union is a solid shape). The silhouette is pre-offset, tinted black at a
  * fixed opacity, and blurred. Returns a full-canvas RGBA PNG, or null if empty.
  */
-async function buildShadow(cover: { buf: Buffer } | null, product: { buf: Buffer } | null, s: ShadowConfig): Promise<Buffer | null> {
+async function buildShadow(cover: { buf: Buffer } | null, product: { buf: Buffer } | null, s: ShadowConfig, slot: ProductSlot): Promise<Buffer | null> {
   if (s.opacity <= 0) return null;
   const parts: OverlayOptions[] = [];
   if (cover) parts.push({ input: cover.buf, left: Math.round(LAYOUT.cover.x) + s.offsetX, top: Math.round(LAYOUT.cover.y) + s.offsetY });
-  if (product) parts.push({ input: product.buf, left: Math.round(LAYOUT.product.x) + s.offsetX, top: Math.round(LAYOUT.product.y) + s.offsetY });
+  if (product) parts.push({ input: product.buf, left: Math.round(slot.x) + s.offsetX, top: Math.round(slot.y) + s.offsetY });
   if (parts.length === 0) return null;
 
   const silhouette = await sharp({ create: { width: CANVAS, height: CANVAS, channels: 4, background: T } })
@@ -44,6 +44,8 @@ export type ComposeInput = {
   coverUrl?: string | null;
   productUrl?: string | null;
   shadow?: ShadowConfig;
+  /** Rectángulo del producto en el lienzo; default = layout histórico. */
+  productSlot?: ProductSlot | null;
 };
 
 /**
@@ -62,17 +64,19 @@ export async function composeProductImage(input: ComposeInput): Promise<Buffer> 
     composites.push({ input: bg, left: 0, top: 0 });
   }
 
+  const slot = input.productSlot ?? DEFAULT_PRODUCT_SLOT;
+
   const coverBuf = input.coverUrl
     ? await sharp(await fetchBuffer(input.coverUrl)).resize(LAYOUT.cover.w, LAYOUT.cover.h, { fit: "contain", background: T }).ensureAlpha().png().toBuffer()
     : null;
   const productBuf = input.productUrl
-    ? await sharp(await fetchBuffer(input.productUrl)).resize(LAYOUT.product.w, LAYOUT.product.h, { fit: "contain", background: T, withoutEnlargement: true }).ensureAlpha().png().toBuffer()
+    ? await sharp(await fetchBuffer(input.productUrl)).resize(Math.round(slot.w), Math.round(slot.h), { fit: "contain", background: T, withoutEnlargement: true }).ensureAlpha().png().toBuffer()
     : null;
 
-  const shadow = await buildShadow(coverBuf ? { buf: coverBuf } : null, productBuf ? { buf: productBuf } : null, input.shadow ?? DEFAULT_SHADOW);
+  const shadow = await buildShadow(coverBuf ? { buf: coverBuf } : null, productBuf ? { buf: productBuf } : null, input.shadow ?? DEFAULT_SHADOW, slot);
   if (shadow) composites.push({ input: shadow, left: 0, top: 0 });
 
-  if (productBuf) composites.push({ input: productBuf, left: Math.round(LAYOUT.product.x), top: Math.round(LAYOUT.product.y) });
+  if (productBuf) composites.push({ input: productBuf, left: Math.round(slot.x), top: Math.round(slot.y) });
   if (coverBuf) composites.push({ input: coverBuf, left: Math.round(LAYOUT.cover.x), top: Math.round(LAYOUT.cover.y) });
 
   return sharp({ create: { width: CANVAS, height: CANVAS, channels: 4, background: T } })

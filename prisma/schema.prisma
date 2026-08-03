@@ -146,6 +146,13 @@ model ImageTemplate {
   name          String
   backgroundUrl String                        // canvas/background layer (1024x1024)
   coverUrl      String                        // frame layer (670x763), drawn on top
+  // Geometría del slot del PRODUCTO en el lienzo 1024×1024. Por plantilla: así
+  // una plantilla puede tener un producto más chico (que no toque los bordes
+  // laterales del case) sin afectar al resto. Defaults = layout histórico.
+  productX      Int       @default(177)
+  productY      Int       @default(224)
+  productW      Int       @default(670)
+  productH      Int       @default(670)
   shadowOffsetX Int       @default(-6)         // generated drop-shadow params
   shadowOffsetY Int       @default(18)
   shadowBlur    Int       @default(20)

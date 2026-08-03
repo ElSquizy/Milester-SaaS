@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getTiendaNubeClient } from "@/lib/tiendanube";
 import { composeProductImage } from "@/lib/composeImage";
+import { productSlotOf } from "@/lib/imageTemplates";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -56,6 +57,7 @@ export async function pushProductImage(
     const png = await composeProductImage({
       backgroundUrl, coverUrl, productUrl: layerUrl!,
       shadow: tmpl ? { offsetX: tmpl.shadowOffsetX, offsetY: tmpl.shadowOffsetY, blur: tmpl.shadowBlur, opacity: tmpl.shadowOpacity } : undefined,
+      productSlot: productSlotOf(tmpl),
     });
     ({ data: newImg } = await client.post(`/products/${product.tiendaNubeId}/images`, {
       attachment: png.toString("base64"),

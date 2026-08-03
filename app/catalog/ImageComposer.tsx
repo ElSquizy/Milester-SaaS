@@ -1,5 +1,5 @@
 "use client";
-import { LAYOUT, pct } from "@/lib/imageTemplates";
+import { LAYOUT, pct, DEFAULT_PRODUCT_SLOT, type ProductSlot } from "@/lib/imageTemplates";
 
 /**
  * Renders the layered composition (background → product → cover) as a square
@@ -9,13 +9,16 @@ export default function ImageComposer({
   backgroundUrl,
   coverUrl,
   productUrl,
+  productSlot,
   size = 320,
 }: {
   backgroundUrl?: string | null;
   coverUrl?: string | null;
   productUrl?: string | null;
+  productSlot?: ProductSlot | null;
   size?: number;
 }) {
+  const slot = productSlot ?? DEFAULT_PRODUCT_SLOT;
   const box = (r: { x: number; y: number; w: number; h: number }): React.CSSProperties => ({
     position: "absolute",
     left: pct(r.x),
@@ -47,7 +50,7 @@ export default function ImageComposer({
       {/* 2. Product (centered, bottom-aligned to cover; scales down to fit) */}
       {productUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={productUrl} alt="" style={{ ...box(LAYOUT.product), objectFit: "contain" }} />
+        <img src={productUrl} alt="" style={{ ...box(slot), objectFit: "contain" }} />
       )}
       {/* 3. Cover frame on top */}
       {coverUrl && (

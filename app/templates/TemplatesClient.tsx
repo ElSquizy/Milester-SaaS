@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { renderTemplate, sampleData, parseFields } from "@/lib/descriptionTemplates";
 import ImageComposer from "../catalog/ImageComposer";
+import { DEFAULT_PRODUCT_SLOT } from "@/lib/imageTemplates";
 import TransformationsView from "./TransformationsView";
 import ProductTemplatesView, { type ProductTmpl } from "./ProductTemplatesView";
 import MessageTemplatesView, { type MsgTmpl } from "./MessageTemplatesView";
 
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
-type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
+type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; productX: number; productY: number; productW: number; productH: number; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
 
 export default function TemplatesClient({ templates, imageTemplates, productTemplates, messageTemplates, categories, categoryTree }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; productTemplates: ProductTmpl[]; messageTemplates: MsgTmpl[]; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[] }) {
   const router = useRouter();
@@ -175,6 +176,11 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
   const [sy, setSy] = useState(template.shadowOffsetY);
   const [blur, setBlur] = useState(template.shadowBlur);
   const [opacity, setOpacity] = useState(template.shadowOpacity);
+  // Geometría del slot del producto (px sobre el lienzo 1024).
+  const [pw, setPw] = useState(template.productW);
+  const [ph, setPh] = useState(template.productH);
+  const [px, setPx] = useState(template.productX);
+  const [py, setPy] = useState(template.productY);
   const [saved, setSaved] = useState(false);
 
   const [preview, setPreview] = useState<string | null>(null);
@@ -191,7 +197,7 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
       try {
         const res = await fetch("/api/compose", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ backgroundUrl, coverUrl, productUrl: placeholder, shadow: { offsetX: sx, offsetY: sy, blur, opacity } }),
+          body: JSON.stringify({ backgroundUrl, coverUrl, productUrl: placeholder, shadow: { offsetX: sx, offsetY: sy, blur, opacity }, productSlot: { x: px, y: py, w: pw, h: ph } }),
         });
         if (res.ok) {
           const blob = await res.blob();
@@ -201,13 +207,13 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
     }, 450);
     return () => { if (timer.current) clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backgroundUrl, coverUrl, sx, sy, blur, opacity, placeholder]);
+  }, [backgroundUrl, coverUrl, sx, sy, blur, opacity, px, py, pw, ph, placeholder]);
 
   async function save() {
     setBusy(true);
     await fetch(`/api/image-templates/${template.id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, backgroundUrl, coverUrl, shadowOffsetX: sx, shadowOffsetY: sy, shadowBlur: blur, shadowOpacity: opacity }),
+      body: JSON.stringify({ name, backgroundUrl, coverUrl, shadowOffsetX: sx, shadowOffsetY: sy, shadowBlur: blur, shadowOpacity: opacity, productX: px, productY: py, productW: pw, productH: ph }),
     });
     setBusy(false);
     setSaved(true); setTimeout(() => setSaved(false), 2500);
@@ -228,6 +234,33 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
         <div>
           <label style={lbl}>URL del cover (marco) <span style={{ color: "var(--color-subtle)", fontWeight: 400 }}>— 670×763, sin sombra</span></label>
           <input className="input" value={coverUrl} onChange={(e) => setCoverUrl(e.target.value)} placeholder="https://…/cover-ps5.png" style={{ marginTop: 5, fontSize: "0.8125rem" }} />
+        </div>
+
+        {/* Product slot geometry — per template, so the product can be smaller
+            and not spill onto the case's side edges. */}
+        <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em" }}>Slot del producto</div>
+            <button
+              onClick={() => { setPx(DEFAULT_PRODUCT_SLOT.x); setPy(DEFAULT_PRODUCT_SLOT.y); setPw(DEFAULT_PRODUCT_SLOT.w); setPh(DEFAULT_PRODUCT_SLOT.h); }}
+              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-brand)" }}
+            >
+              Restablecer
+            </button>
+          </div>
+          <p style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", margin: "-4px 0 0", lineHeight: 1.4 }}>
+            Achicá el ancho/alto para que la imagen no toque los bordes laterales del case. Lienzo 1024×1024.
+          </p>
+          <Slider label="Ancho" value={pw} min={200} max={1024} step={2} onChange={setPw} suffix="px" />
+          <Slider label="Alto" value={ph} min={200} max={1024} step={2} onChange={setPh} suffix="px" />
+          <Slider label="Posición X" value={px} min={0} max={1024 - pw} step={2} onChange={setPx} suffix="px" />
+          <Slider label="Posición Y" value={py} min={0} max={1024 - ph} step={2} onChange={setPy} suffix="px" />
+          <button
+            onClick={() => { const w = pw; setPx(Math.round((1024 - w) / 2)); }}
+            style={{ alignSelf: "flex-start", border: "1px dashed var(--color-border)", background: "transparent", borderRadius: 8, padding: "4px 10px", fontSize: "0.6875rem", color: "var(--color-muted)", cursor: "pointer" }}
+          >
+            Centrar horizontalmente
+          </button>
         </div>
 
         {/* Shadow controls */}
@@ -252,7 +285,7 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={preview} alt="" style={{ width: 360, maxWidth: "100%", aspectRatio: "1/1", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)" }} />
         ) : (
-          <ImageComposer backgroundUrl={backgroundUrl} coverUrl={coverUrl} size={360} />
+          <ImageComposer backgroundUrl={backgroundUrl} coverUrl={coverUrl} productUrl={placeholder} productSlot={{ x: px, y: py, w: pw, h: ph }} size={360} />
         )}
         <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 12, textAlign: "center" }}>La imagen “producto” es un marcador; cada producto pone la suya. La sombra se genera automáticamente.</p>
       </div>
