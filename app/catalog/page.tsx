@@ -35,6 +35,9 @@ export default async function CatalogPage({
     : sort === "worst-selling" ? { unitsSold: "asc" as const }
     : sort === "price-high" ? { price: "desc" as const }
     : sort === "price-low" ? { price: "asc" as const }
+    // Costo USD promocional: los que no tienen (null) siempre al final.
+    : sort === "usd-promo-high" ? { costUsdPromo: { sort: "desc" as const, nulls: "last" as const } }
+    : sort === "usd-promo-low" ? { costUsdPromo: { sort: "asc" as const, nulls: "last" as const } }
     : sort === "name-asc" ? { nameSort: "asc" as const }
     : sort === "name-desc" ? { nameSort: "desc" as const }
     : { createdAt: "desc" as const };

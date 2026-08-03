@@ -86,6 +86,8 @@ const SORT_OPTS = [
   { v: "worst-selling", label: "Menos vendidos" },
   { v: "price-high", label: "Mayor precio" },
   { v: "price-low", label: "Menor precio" },
+  { v: "usd-promo-high", label: "Mayor costo USD promo" },
+  { v: "usd-promo-low", label: "Menor costo USD promo" },
 ];
 
 const filterGroupLabel: React.CSSProperties = {
