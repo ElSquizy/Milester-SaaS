@@ -46,7 +46,25 @@ export type ComposeInput = {
   shadow?: ShadowConfig;
   /** Rectángulo del producto en el lienzo; default = layout histórico. */
   productSlot?: ProductSlot | null;
+  /** Recorte lateral: fracción (0–0.45) que se corta de CADA lado del producto. */
+  cropSides?: number | null;
 };
+
+/**
+ * Recorta la imagen del producto por los laterales (franja central) antes de
+ * encuadrarla. `cropSides` es la fracción que se saca de cada lado.
+ */
+async function cropProductSides(buf: Buffer, cropSides: number): Promise<Buffer> {
+  const frac = Math.min(0.45, Math.max(0, cropSides));
+  if (frac <= 0) return buf;
+  const meta = await sharp(buf).metadata();
+  const w = meta.width ?? 0, h = meta.height ?? 0;
+  if (!w || !h) return buf;
+  const cut = Math.round(w * frac);
+  const newW = w - 2 * cut;
+  if (newW <= 0) return buf;
+  return sharp(buf).extract({ left: cut, top: 0, width: newW, height: h }).png().toBuffer();
+}
 
 /**
  * Composes the product image (1024×1024 PNG). Layer order, bottom → top:
@@ -70,7 +88,8 @@ export async function composeProductImage(input: ComposeInput): Promise<Buffer> 
     ? await sharp(await fetchBuffer(input.coverUrl)).resize(LAYOUT.cover.w, LAYOUT.cover.h, { fit: "contain", background: T }).ensureAlpha().png().toBuffer()
     : null;
   const productBuf = input.productUrl
-    ? await sharp(await fetchBuffer(input.productUrl)).resize(Math.round(slot.w), Math.round(slot.h), { fit: "contain", background: T, withoutEnlargement: true }).ensureAlpha().png().toBuffer()
+    ? await sharp(await cropProductSides(await fetchBuffer(input.productUrl), input.cropSides ?? 0))
+        .resize(Math.round(slot.w), Math.round(slot.h), { fit: "contain", background: T, withoutEnlargement: true }).ensureAlpha().png().toBuffer()
     : null;
 
   const shadow = await buildShadow(coverBuf ? { buf: coverBuf } : null, productBuf ? { buf: productBuf } : null, input.shadow ?? DEFAULT_SHADOW, slot);

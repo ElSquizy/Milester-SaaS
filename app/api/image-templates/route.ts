@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const templates = await prisma.imageTemplate.findMany({
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, backgroundUrl: true, coverUrl: true, productX: true, productY: true, productW: true, productH: true, shadowOffsetX: true, shadowOffsetY: true, shadowBlur: true, shadowOpacity: true, _count: { select: { products: true } } },
+    select: { id: true, name: true, backgroundUrl: true, coverUrl: true, productX: true, productY: true, productW: true, productH: true, cropLateral: true, shadowOffsetX: true, shadowOffsetY: true, shadowBlur: true, shadowOpacity: true, _count: { select: { products: true } } },
   });
   return NextResponse.json(templates.map((t) => ({ ...t, productCount: t._count.products })));
 }

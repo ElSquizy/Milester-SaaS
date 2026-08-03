@@ -58,6 +58,7 @@ export async function pushProductImage(
       backgroundUrl, coverUrl, productUrl: layerUrl!,
       shadow: tmpl ? { offsetX: tmpl.shadowOffsetX, offsetY: tmpl.shadowOffsetY, blur: tmpl.shadowBlur, opacity: tmpl.shadowOpacity } : undefined,
       productSlot: productSlotOf(tmpl),
+      cropSides: tmpl?.cropLateral ?? 0,
     });
     ({ data: newImg } = await client.post(`/products/${product.tiendaNubeId}/images`, {
       attachment: png.toString("base64"),

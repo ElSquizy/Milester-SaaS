@@ -153,6 +153,9 @@ model ImageTemplate {
   productY      Int       @default(224)
   productW      Int       @default(670)
   productH      Int       @default(670)
+  // Recorte lateral de la imagen del producto: fracción (0–0.45) que se corta de
+  // CADA lado antes de encuadrarla en el slot, para quedarse con la franja central.
+  cropLateral   Float     @default(0)
   shadowOffsetX Int       @default(-6)         // generated drop-shadow params
   shadowOffsetY Int       @default(18)
   shadowBlur    Int       @default(20)

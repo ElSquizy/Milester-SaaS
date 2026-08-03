@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
-  const data: { name?: string; backgroundUrl?: string; coverUrl?: string; shadowOffsetX?: number; shadowOffsetY?: number; shadowBlur?: number; shadowOpacity?: number; productX?: number; productY?: number; productW?: number; productH?: number } = {};
+  const data: { name?: string; backgroundUrl?: string; coverUrl?: string; shadowOffsetX?: number; shadowOffsetY?: number; shadowBlur?: number; shadowOpacity?: number; productX?: number; productY?: number; productW?: number; productH?: number; cropLateral?: number } = {};
   if (typeof body.name === "string") data.name = body.name.trim();
   if (typeof body.backgroundUrl === "string") data.backgroundUrl = body.backgroundUrl.trim();
   if (typeof body.coverUrl === "string") data.coverUrl = body.coverUrl.trim();
@@ -14,6 +14,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (Number.isFinite(body.productY)) data.productY = Math.round(body.productY);
   if (Number.isFinite(body.productW)) data.productW = Math.max(32, Math.round(body.productW));
   if (Number.isFinite(body.productH)) data.productH = Math.max(32, Math.round(body.productH));
+  if (Number.isFinite(body.cropLateral)) data.cropLateral = Math.min(0.45, Math.max(0, body.cropLateral));
   if (Number.isFinite(body.shadowOffsetX)) data.shadowOffsetX = Math.round(body.shadowOffsetX);
   if (Number.isFinite(body.shadowOffsetY)) data.shadowOffsetY = Math.round(body.shadowOffsetY);
   if (Number.isFinite(body.shadowBlur)) data.shadowBlur = Math.max(0, Math.round(body.shadowBlur));

@@ -21,6 +21,7 @@ export async function POST(req: Request) {
       productUrl: body.productUrl,
       shadow: body.shadow,
       productSlot: body.productSlot,
+      cropSides: body.cropSides,
     });
     return new NextResponse(new Uint8Array(png), {
       headers: { "Content-Type": "image/png", "Cache-Control": "no-store" },

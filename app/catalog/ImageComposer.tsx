@@ -10,15 +10,19 @@ export default function ImageComposer({
   coverUrl,
   productUrl,
   productSlot,
+  cropSides = 0,
   size = 320,
 }: {
   backgroundUrl?: string | null;
   coverUrl?: string | null;
   productUrl?: string | null;
   productSlot?: ProductSlot | null;
+  cropSides?: number | null;
   size?: number;
 }) {
   const slot = productSlot ?? DEFAULT_PRODUCT_SLOT;
+  // Aproximación del recorte lateral (el resultado real lo compone el server).
+  const cropPct = Math.min(45, Math.max(0, (cropSides ?? 0) * 100));
   const box = (r: { x: number; y: number; w: number; h: number }): React.CSSProperties => ({
     position: "absolute",
     left: pct(r.x),
@@ -50,7 +54,7 @@ export default function ImageComposer({
       {/* 2. Product (centered, bottom-aligned to cover; scales down to fit) */}
       {productUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={productUrl} alt="" style={{ ...box(slot), objectFit: "contain" }} />
+        <img src={productUrl} alt="" style={{ ...box(slot), objectFit: "contain", clipPath: cropPct > 0 ? `inset(0 ${cropPct}% 0 ${cropPct}%)` : undefined }} />
       )}
       {/* 3. Cover frame on top */}
       {coverUrl && (

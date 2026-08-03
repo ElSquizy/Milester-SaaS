@@ -10,7 +10,7 @@ import ProductTemplatesView, { type ProductTmpl } from "./ProductTemplatesView";
 import MessageTemplatesView, { type MsgTmpl } from "./MessageTemplatesView";
 
 type Tmpl = { id: number; name: string; skeleton: string; fields: string; productCount: number };
-type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; productX: number; productY: number; productW: number; productH: number; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
+type ImgTmpl = { id: number; name: string; backgroundUrl: string; coverUrl: string; productX: number; productY: number; productW: number; productH: number; cropLateral: number; shadowOffsetX: number; shadowOffsetY: number; shadowBlur: number; shadowOpacity: number; productCount: number };
 
 export default function TemplatesClient({ templates, imageTemplates, productTemplates, messageTemplates, categories, categoryTree }: { templates: Tmpl[]; imageTemplates: ImgTmpl[]; productTemplates: ProductTmpl[]; messageTemplates: MsgTmpl[]; categories: string[]; categoryTree?: { name: string; tnId: string; parentTnId: string | null }[] }) {
   const router = useRouter();
@@ -181,6 +181,7 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
   const [ph, setPh] = useState(template.productH);
   const [px, setPx] = useState(template.productX);
   const [py, setPy] = useState(template.productY);
+  const [crop, setCrop] = useState(template.cropLateral);
   const [saved, setSaved] = useState(false);
 
   const [preview, setPreview] = useState<string | null>(null);
@@ -197,7 +198,7 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
       try {
         const res = await fetch("/api/compose", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ backgroundUrl, coverUrl, productUrl: placeholder, shadow: { offsetX: sx, offsetY: sy, blur, opacity }, productSlot: { x: px, y: py, w: pw, h: ph } }),
+          body: JSON.stringify({ backgroundUrl, coverUrl, productUrl: placeholder, shadow: { offsetX: sx, offsetY: sy, blur, opacity }, productSlot: { x: px, y: py, w: pw, h: ph }, cropSides: crop }),
         });
         if (res.ok) {
           const blob = await res.blob();
@@ -207,13 +208,13 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
     }, 450);
     return () => { if (timer.current) clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backgroundUrl, coverUrl, sx, sy, blur, opacity, px, py, pw, ph, placeholder]);
+  }, [backgroundUrl, coverUrl, sx, sy, blur, opacity, px, py, pw, ph, crop, placeholder]);
 
   async function save() {
     setBusy(true);
     await fetch(`/api/image-templates/${template.id}`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, backgroundUrl, coverUrl, shadowOffsetX: sx, shadowOffsetY: sy, shadowBlur: blur, shadowOpacity: opacity, productX: px, productY: py, productW: pw, productH: ph }),
+      body: JSON.stringify({ name, backgroundUrl, coverUrl, shadowOffsetX: sx, shadowOffsetY: sy, shadowBlur: blur, shadowOpacity: opacity, productX: px, productY: py, productW: pw, productH: ph, cropLateral: crop }),
     });
     setBusy(false);
     setSaved(true); setTimeout(() => setSaved(false), 2500);
@@ -261,6 +262,12 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
           >
             Centrar horizontalmente
           </button>
+          <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 12, marginTop: 2 }}>
+            <Slider label="Recorte lateral" value={crop} min={0} max={0.45} step={0.01} onChange={setCrop} pct />
+            <p style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", margin: "4px 0 0", lineHeight: 1.4 }}>
+              Corta la imagen por los lados (cada lado) y conserva la franja central, sin encogerla.
+            </p>
+          </div>
         </div>
 
         {/* Shadow controls */}
@@ -285,7 +292,7 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={preview} alt="" style={{ width: 360, maxWidth: "100%", aspectRatio: "1/1", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)" }} />
         ) : (
-          <ImageComposer backgroundUrl={backgroundUrl} coverUrl={coverUrl} productUrl={placeholder} productSlot={{ x: px, y: py, w: pw, h: ph }} size={360} />
+          <ImageComposer backgroundUrl={backgroundUrl} coverUrl={coverUrl} productUrl={placeholder} productSlot={{ x: px, y: py, w: pw, h: ph }} cropSides={crop} size={360} />
         )}
         <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 12, textAlign: "center" }}>La imagen “producto” es un marcador; cada producto pone la suya. La sombra se genera automáticamente.</p>
       </div>
