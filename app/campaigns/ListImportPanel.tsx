@@ -1,5 +1,6 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { MatchResult, MatchCandidate } from "@/lib/listMatch";
 
 export type ImportItem = { id: number; name: string; imageUrl: string | null; price: number };
@@ -8,16 +9,27 @@ export type ImportItem = { id: number; name: string; imageUrl: string | null; pr
  * Importar campaña desde una lista pegada. Recall-first: por cada línea muestra
  * los candidatos más parecidos y el usuario tilda el/los correctos. Los de alta
  * confianza vienen pre-tildados para colocar la mayoría sola.
+ *
+ * Se renderiza por PORTAL a document.body: el modal del wizard usa transform y
+ * backdrop-filter, que atrapan a un `position: fixed` anidado (se veía recortado).
+ *
+ * La selección se guarda por LÍNEA+candidato (no por id de producto), así el
+ * mismo producto que aparece como candidato en dos líneas se marca por separado.
  */
 export default function ListImportPanel({ onClose, onAdd }: {
   onClose: () => void;
   onAdd: (items: ImportItem[]) => void;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<MatchResult[] | null>(null);
-  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [checked, setChecked] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
+
+  useEffect(() => setMounted(true), []);
+
+  const key = (line: number, id: number) => `${line}:${id}`;
 
   async function run() {
     setLoading(true); setError("");
@@ -31,25 +43,25 @@ export default function ListImportPanel({ onClose, onAdd }: {
       const rs: MatchResult[] = d.results ?? [];
       setResults(rs);
       // Pre-tildar el mejor candidato de cada línea si es de alta confianza.
-      const pre = new Set<number>();
-      for (const r of rs) {
+      const pre = new Set<string>();
+      rs.forEach((r, li) => {
         const top = r.candidates[0];
-        if (top && top.confidence === "alta") pre.add(top.id);
-      }
+        if (top && top.confidence === "alta") pre.add(key(li, top.id));
+      });
       setChecked(pre);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally { setLoading(false); }
   }
 
-  function toggle(id: number) {
-    setChecked((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  function toggle(k: string) {
+    setChecked((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
   }
 
   function checkAllHigh() {
     setChecked((prev) => {
       const n = new Set(prev);
-      for (const r of results ?? []) for (const c of r.candidates) if (c.confidence === "alta") n.add(c.id);
+      (results ?? []).forEach((r, li) => r.candidates.forEach((c) => { if (c.confidence === "alta") n.add(key(li, c.id)); }));
       return n;
     });
   }
@@ -60,19 +72,21 @@ export default function ListImportPanel({ onClose, onAdd }: {
     return { lines: results.length, withMatch, none: results.length - withMatch };
   }, [results]);
 
-  // Reunir los productos tildados (dedupe por id) para el merge.
+  // Productos elegidos (dedupe por id — a la campaña un producto entra una vez).
   const chosen = useMemo(() => {
     if (!results) return [] as ImportItem[];
     const byId = new Map<number, ImportItem>();
-    for (const r of results) for (const c of r.candidates) {
-      if (checked.has(c.id) && !byId.has(c.id)) byId.set(c.id, { id: c.id, name: c.name, imageUrl: c.imageUrl, price: c.price });
-    }
+    results.forEach((r, li) => r.candidates.forEach((c) => {
+      if (checked.has(key(li, c.id)) && !byId.has(c.id)) byId.set(c.id, { id: c.id, name: c.name, imageUrl: c.imageUrl, price: c.price });
+    }));
     return [...byId.values()];
   }, [results, checked]);
 
-  return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 500, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 20px" }}>
-      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 720, maxHeight: "calc(100dvh - 80px)", background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+  if (!mounted) return null;
+
+  const panel = (
+    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 600, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 20px" }}>
+      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 720, maxHeight: "calc(100dvh - 48px)", background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Header */}
         <div style={{ padding: "18px 24px", borderBottom: "1px solid var(--color-divider)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
@@ -81,7 +95,7 @@ export default function ListImportPanel({ onClose, onAdd }: {
         </div>
 
         {/* Body */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "18px 24px" }}>
+        <div style={{ flex: 1, minHeight: 0, overflowY: "auto", padding: "18px 24px" }}>
           {!results ? (
             <>
               <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", margin: "0 0 10px", lineHeight: 1.5 }}>
@@ -106,8 +120,8 @@ export default function ListImportPanel({ onClose, onAdd }: {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {results.map((r, i) => (
-                  <div key={i} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-input)", overflow: "hidden" }}>
+                {results.map((r, li) => (
+                  <div key={li} style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-input)", overflow: "hidden" }}>
                     <div style={{ padding: "8px 12px", background: "var(--color-surface-2)", display: "flex", alignItems: "baseline", gap: 8 }}>
                       <span style={{ fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.line.title}</span>
                       {r.line.platforms.length > 0 && <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>[{r.line.platforms.join(", ")}]</span>}
@@ -115,9 +129,10 @@ export default function ListImportPanel({ onClose, onAdd }: {
                     </div>
                     {r.candidates.length === 0 ? (
                       <div style={{ padding: "10px 12px", fontSize: "0.75rem", color: "var(--color-subtle)" }}>Sin candidatos en el catálogo.</div>
-                    ) : r.candidates.map((c) => (
-                      <CandidateRow key={c.id} c={c} on={checked.has(c.id)} onToggle={() => toggle(c.id)} />
-                    ))}
+                    ) : r.candidates.map((c) => {
+                      const k = key(li, c.id);
+                      return <CandidateRow key={k} c={c} on={checked.has(k)} onToggle={() => toggle(k)} />;
+                    })}
                   </div>
                 ))}
               </div>
@@ -138,6 +153,8 @@ export default function ListImportPanel({ onClose, onAdd }: {
       </div>
     </div>
   );
+
+  return createPortal(panel, document.body);
 }
 
 function CandidateRow({ c, on, onToggle }: { c: MatchCandidate; on: boolean; onToggle: () => void }) {
