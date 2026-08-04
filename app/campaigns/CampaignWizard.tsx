@@ -68,6 +68,26 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
+  // Salir del asistente con progreso cargado lo pierde todo. Igual que el modal
+  // de producto del catálogo: si hay progreso, pedir confirmación antes de cerrar.
+  const [pendingClose, setPendingClose] = useState<null | { run: () => void }>(null);
+  const dirty = name.trim() !== "" || selected.size > 0 || start !== null || end !== null || tag.trim() !== "" || catMode !== "none";
+  const requestClose = useCallback((fn: () => void) => {
+    if (dirty) setPendingClose({ run: fn });
+    else fn();
+  }, [dirty]);
+
+  // Escape: cierra el diálogo de confirmación si está abierto; si no, intenta salir.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (pendingClose) { setPendingClose(null); return; }
+      if (dirty) setPendingClose({ run: onClose }); else onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dirty, pendingClose, onClose]);
+
   useEffect(() => { fetch("/api/categories").then((r) => r.json()).then(setCats).catch(() => {}); }, []);
 
   // When entering the price stage, seed a default price for any product without one,
@@ -243,7 +263,8 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
   }
 
   return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: isMobile ? 400 : 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? 0 : "40px 24px" }}>
+    <>
+    <div onClick={() => requestClose(onClose)} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: isMobile ? 400 : 60, background: "rgba(17,24,39,0.40)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: isMobile ? 0 : "40px 24px" }}>
       <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: isMobile ? "none" : 860, height: isMobile ? "100dvh" : "calc(100dvh - 80px)", background: "var(--color-surface)", borderRadius: isMobile ? 0 : "var(--radius-modal)", boxShadow: "var(--shadow-float)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {/* Header + stepper */}
@@ -252,7 +273,7 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
             <div style={{ fontSize: "1.125rem", fontWeight: 600, letterSpacing: "-0.02em" }}>
               Nueva campaña {isCosts && <span className="pill pill-neutral" style={{ marginLeft: 6, verticalAlign: "middle" }}>por costos</span>}
             </div>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
+            <button onClick={() => requestClose(onClose)} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {stages.map((s, i) => (
@@ -298,6 +319,27 @@ export default function CampaignWizard({ mode = "prices", onClose, onCreated }: 
         </div>
       </div>
     </div>
+
+    {/* Confirmación de salida — no perder el progreso de la campaña por un clic afuera */}
+    {pendingClose && (
+      <div
+        onClick={(e) => { e.stopPropagation(); setPendingClose(null); }}
+        className="anim-in"
+        style={{ position: "fixed", inset: 0, zIndex: isMobile ? 500 : 90, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(3px)", WebkitBackdropFilter: "blur(3px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      >
+        <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 420, background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", padding: "24px 26px" }}>
+          <div style={{ fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 6 }}>¿Salir del asistente?</div>
+          <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: "0 0 20px", lineHeight: 1.5 }}>
+            Se perderá el progreso de esta campaña (productos, fechas y precios cargados).
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button className="btn-primary" onClick={() => setPendingClose(null)}>Seguir editando</button>
+            <button className="btn-secondary" onClick={() => { const a = pendingClose; setPendingClose(null); a.run(); }} style={{ color: "var(--color-danger)" }}>Salir sin guardar</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
