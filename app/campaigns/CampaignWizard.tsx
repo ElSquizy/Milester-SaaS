@@ -6,6 +6,7 @@ import {
 } from "date-fns";
 import { es } from "date-fns/locale";
 import { useIsMobile } from "@/components/useIsMobile";
+import ListImportPanel, { type ImportItem } from "./ListImportPanel";
 
 type Sel = { id: number; name: string; imageUrl: string | null; price: number };
 type VariantInfo = { id: number; label: string; price: number; promotionalPrice: number | null };
@@ -355,6 +356,14 @@ function StageIdentity(props: {
 }) {
   const { name, setName, selected, setSelected, tag, setTag, cats, catMode, setCatMode, existingCatId, setExistingCatId, newCatName, setNewCatName, newCatParent, setNewCatParent } = props;
   const [q, setQ] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  // Merge de los productos elegidos en el importador de listas al set actual.
+  function addImported(items: ImportItem[]) {
+    const next = new Map(selected);
+    for (const it of items) next.set(it.id, { id: it.id, name: it.name, imageUrl: it.imageUrl, price: it.price });
+    setSelected(next);
+  }
   const [products, setProducts] = useState<GridProduct[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -448,6 +457,10 @@ function StageIdentity(props: {
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <label style={lbl}>Productos ({selected.size} seleccionados)</label>
+          <button onClick={() => setImporting(true)} className="btn-secondary" style={{ padding: "5px 11px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: 6 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+            Importar lista
+          </button>
         </div>
         <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por nombre o SKU..." style={{ marginBottom: 12 }} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 }}>
@@ -472,6 +485,8 @@ function StageIdentity(props: {
         </div>
         {hasMore && <div style={{ textAlign: "center", marginTop: 14 }}><button className="btn-secondary" onClick={() => fetchPage(page + 1, true)} disabled={loading}>{loading ? "..." : "Cargar más"}</button></div>}
       </div>
+
+      {importing && <ListImportPanel onClose={() => setImporting(false)} onAdd={addImported} />}
     </div>
   );
 }
