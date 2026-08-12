@@ -86,6 +86,12 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
   const [variantMeta, setVariantMeta] = useState<Map<number, VariantInfo[]>>(new Map());
   const [variantPrices, setVariantPrices] = useState<Map<number, Map<number, number>>>(new Map());
   const isActive = status === "active";
+  // Modo costos: costo promocional USD de los productos NUEVOS + precio derivado en vivo.
+  const [promoCosts, setPromoCosts] = useState<Map<number, string>>(new Map());
+  const [quote, setQuote] = useState<Map<number, number | null>>(new Map());
+  const [dollarSet, setDollarSet] = useState<boolean | null>(null);
+  const newIdSet = new Set(items.filter((i) => !originalIds.has(i.productId)).map((i) => i.productId));
+  const newIdsKey = [...newIdSet].join(",");
 
   const load = useCallback(() => {
     fetch(`/api/campaigns/${campaignId}/items`).then((r) => r.json()).then((d: Item[]) => {
@@ -122,6 +128,33 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.map((i) => i.productId).join(",")]);
 
+  // Modo costos: ¿hay dólar cargado en Precios? (sin él no se puede derivar precio)
+  useEffect(() => {
+    if (!isCosts) return;
+    fetch("/api/pricing/config").then((r) => r.json()).then((s) => setDollarSet((s?.dollar ?? 0) > 0)).catch(() => setDollarSet(false));
+  }, [isCosts]);
+
+  // Cotización en vivo del precio de los productos NUEVOS (modo costos), con debounce.
+  useEffect(() => {
+    if (!isCosts) return;
+    const payload = [...newIdSet]
+      .map((id) => ({ productId: id, costUsd: parseFloat((promoCosts.get(id) ?? "").replace(",", ".")) }))
+      .filter((i) => !isNaN(i.costUsd) && i.costUsd > 0);
+    if (!payload.length) { setQuote(new Map()); return; }
+    const t = setTimeout(() => {
+      fetch("/api/pricing/quote", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: payload }) })
+        .then((r) => r.json())
+        .then((d) => setQuote(new Map(Object.entries(d.prices || {}).map(([k, v]) => [Number(k), v as number | null]))))
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCosts, promoCosts, newIdsKey]);
+
+  function setCost(productId: number, val: string) {
+    setPromoCosts((prev) => { const n = new Map(prev); n.set(productId, val); return n; });
+  }
+
   function setPromo(productId: number, val: string) {
     const n = parseFloat(val.replace(/\./g, "").replace(",", "."));
     setItems((prev) => prev.map((i) => i.productId === productId ? { ...i, promoPrice: isNaN(n) ? 0 : n } : i));
@@ -147,11 +180,31 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
     });
   }
 
+  // Modo costos: no se puede guardar hasta que cada producto NUEVO tenga su costo promo.
+  const costsReady = !isCosts || [...newIdSet].every((id) => {
+    const c = parseFloat((promoCosts.get(id) ?? "").replace(",", "."));
+    return !isNaN(c) && c > 0;
+  });
+
   async function persist() {
-    if (isCosts) return; // modo costos: nada que persistir desde acá
     const currentIds = new Set(items.map((i) => i.productId));
     const addIds = items.filter((i) => !originalIds.has(i.productId)).map((i) => i.productId);
     const removeIds = [...originalIds].filter((id) => !currentIds.has(id));
+
+    if (isCosts) {
+      // Solo agregar/quitar: el precio lo deriva la tabla desde el costo promo.
+      const pc: Record<number, number> = {};
+      for (const id of addIds) {
+        const c = parseFloat((promoCosts.get(id) ?? "").replace(",", "."));
+        if (!isNaN(c) && c > 0) pc[id] = c;
+      }
+      await fetch(`/api/campaigns/${campaignId}/items`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addIds, removeIds, promoCosts: pc }),
+      });
+      return;
+    }
+
     await fetch(`/api/campaigns/${campaignId}/items`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -207,19 +260,24 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
             <div style={{ fontSize: "0.9375rem", fontWeight: 600 }}>{isActive ? "Editar campaña activa" : "Precios de la campaña"}</div>
             <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>
               {isCosts
-                ? `${items.length} productos · precios derivados de la tabla de Precios (solo lectura)`
+                ? `${items.length} productos · agregá o quitá (el precio de los nuevos lo deriva la tabla desde el costo promo)`
                 : `${items.length} productos · agregá, quitá o editá el precio promocional`}
             </div>
           </div>
           <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
         </div>
 
-        {!isCosts && <div style={{ padding: "10px 12px 0" }}>
+        <div style={{ padding: "10px 12px 0" }}>
           <button className="btn-secondary" onClick={() => setGridOpen(true)} style={{ width: "100%", justifyContent: "center" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             Agregar / quitar productos
           </button>
-        </div>}
+          {isCosts && dollarSet === false && newIdSet.size > 0 && (
+            <div style={{ marginTop: 8, fontSize: "0.75rem", color: "var(--color-danger)", fontWeight: 600 }}>
+              ⚠ No hay dólar cargado en Precios — no se puede derivar el precio de los productos nuevos.
+            </div>
+          )}
+        </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 12px" }}>
           {loading ? (
@@ -227,6 +285,45 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
           ) : items.length === 0 ? (
             <div style={{ padding: 24, textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Sin productos. Agregá con el botón de arriba.</div>
           ) : items.map((it) => {
+            // Modo costos + producto NUEVO: cargar el costo promo USD; el precio lo deriva la tabla.
+            if (isCosts && newIdSet.has(it.productId)) {
+              const raw = promoCosts.get(it.productId) ?? "";
+              const c = parseFloat(raw.replace(",", "."));
+              const derived = !isNaN(c) && c > 0 ? (quote.get(it.productId) ?? null) : null;
+              return (
+                <div key={it.productId} style={{ borderBottom: "1px solid var(--color-divider)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", flexWrap: "wrap" }}>
+                    {it.imageUrl
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={it.imageUrl} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 34, height: 34, borderRadius: 8, background: "var(--color-surface-2)", flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 120 }}>
+                      <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {it.name} <span className="pill pill-info" style={{ fontSize: "0.5625rem", marginLeft: 4, verticalAlign: "middle" }}>NUEVO</span>
+                      </div>
+                      <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>Base ${it.basePrice.toLocaleString("es-AR")}</div>
+                    </div>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-brand)" }}>
+                      Costo USD promo
+                      <div style={{ position: "relative", width: 90 }}>
+                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-faint)", pointerEvents: "none" }}>US$</span>
+                        <input className="input" inputMode="decimal" value={raw} placeholder="0" onChange={(e) => setCost(it.productId, e.target.value)}
+                          style={{ paddingLeft: 30, padding: "6px 8px 6px 30px", fontSize: "0.8125rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }} />
+                      </div>
+                    </label>
+                    <div style={{ width: 92, textAlign: "right" }}>
+                      <div style={{ fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-subtle)" }}>Promo</div>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: derived != null ? "var(--color-success)" : "var(--color-faint)" }}>
+                        {derived != null ? `$${derived.toLocaleString("es-AR")}` : "—"}
+                      </div>
+                    </div>
+                    <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            }
             const vs = variantMeta.get(it.productId);
             const off = it.basePrice > 0 ? Math.round((1 - it.promoPrice / it.basePrice) * 100) : 0;
             return (
@@ -279,11 +376,11 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
           {error && <span style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-danger)" }}>{error}</span>}
           {!error && <span style={{ flex: 1, fontSize: "0.75rem", color: "var(--color-subtle)" }}>El precio base no se toca — solo el promocional.</span>}
           {isActive ? (
-            <button className="btn-primary" onClick={saveActive} disabled={busy || items.length === 0}>{busy ? "..." : "Guardar cambios"}</button>
+            <button className="btn-primary" onClick={saveActive} disabled={busy || items.length === 0 || !costsReady} title={!costsReady ? "Cargá el costo promocional de los productos nuevos" : undefined}>{busy ? "..." : "Guardar cambios"}</button>
           ) : (
             <>
-              <button className="btn-secondary" onClick={saveDraft} disabled={busy}>Guardar borrador</button>
-              <button className="btn-primary" onClick={activate} disabled={busy || items.length === 0}>{busy ? "..." : "Activar campaña"}</button>
+              <button className="btn-secondary" onClick={saveDraft} disabled={busy || !costsReady}>Guardar borrador</button>
+              <button className="btn-primary" onClick={activate} disabled={busy || items.length === 0 || !costsReady} title={!costsReady ? "Cargá el costo promocional de los productos nuevos" : undefined}>{busy ? "..." : "Activar campaña"}</button>
             </>
           )}
         </div>

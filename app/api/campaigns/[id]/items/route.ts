@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { applyItemToProduct, revertItemFromProduct, parseVariantPrices } from "@/lib/campaigns";
+import { getPricingSettings, priceForProduct } from "@/lib/pricing";
 
 /** GET: the campaign's product items (editable preview: base price + promo price). */
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -34,7 +35,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // Draft and ACTIVE campaigns are editable; ended ones are read-only.
   if (campaign.status === "ended") return NextResponse.json({ error: "La campaña ya terminó" }, { status: 400 });
 
-  const { prices, removeIds, addIds } = await req.json();
+  const { prices, removeIds, addIds, promoCosts } = await req.json();
+
+  // Modo "costs": el precio promocional se deriva del costo USD promo con la tabla
+  // de franjas (igual que en la creación); requiere el dólar cargado en Precios.
+  const settings = campaign.mode === "costs" ? await getPricingSettings() : null;
 
   if (Array.isArray(removeIds) && removeIds.length) {
     await prisma.campaignItem.deleteMany({ where: { campaignId, productId: { in: removeIds.map(Number) } } });
@@ -42,12 +47,27 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   if (Array.isArray(addIds) && addIds.length) {
     const existing = new Set((await prisma.campaignItem.findMany({ where: { campaignId }, select: { productId: true } })).map((i) => i.productId));
-    const toAdd = await prisma.product.findMany({ where: { id: { in: addIds.map(Number).filter((n: number) => !existing.has(n)) } }, select: { id: true, price: true } });
+    const ids = addIds.map(Number).filter((n: number) => !existing.has(n));
+    const toAdd = await prisma.product.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, price: true, categories: { select: { categoryId: true } } },
+    });
     for (const p of toAdd) {
-      const promo = campaign.discountType === "pct"
-        ? Math.max(0, Math.round(p.price * (1 - campaign.discountValue / 100) * 100) / 100)
-        : Math.max(0, p.price - campaign.discountValue);
-      await prisma.campaignItem.create({ data: { campaignId, productId: p.id, originalPrice: p.price, campaignPrice: promo } });
+      let campaignPrice: number;
+      let promoCostUsd: number | null = null;
+      if (campaign.mode === "costs") {
+        const cost = Number(promoCosts?.[p.id]);
+        if (!settings || isNaN(cost) || cost <= 0) continue; // sin costo promo o sin dólar → no se agrega
+        const computed = priceForProduct({ name: p.name, categoryIds: p.categories.map((c) => c.categoryId) }, cost, settings);
+        if (computed == null) continue; // costo fuera de rango de las franjas
+        campaignPrice = computed;
+        promoCostUsd = cost;
+      } else {
+        campaignPrice = campaign.discountType === "pct"
+          ? Math.max(0, Math.round(p.price * (1 - campaign.discountValue / 100) * 100) / 100)
+          : Math.max(0, p.price - campaign.discountValue);
+      }
+      await prisma.campaignItem.create({ data: { campaignId, productId: p.id, originalPrice: p.price, campaignPrice, promoCostUsd } });
     }
   }
 
@@ -74,7 +94,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (campaign.status === "active") {
     const meta = { addTag: campaign.addTag, addCategoryId: campaign.addCategoryId };
     if (Array.isArray(removeIds)) {
-      for (const pid of removeIds.map(Number)) await revertItemFromProduct(meta, pid, campaignId, false);
+      for (const pid of removeIds.map(Number)) {
+        await revertItemFromProduct(meta, pid, campaignId, false);
+        // Modo "costs": al quitar, limpiar también el costo promocional del producto.
+        if (campaign.mode === "costs") await prisma.product.update({ where: { id: pid }, data: { costUsdPromo: null } });
+      }
     }
     const affected = new Set<number>([
       ...(Array.isArray(addIds) ? addIds.map(Number) : []),
@@ -82,7 +106,13 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     ]);
     if (affected.size) {
       const items = await prisma.campaignItem.findMany({ where: { campaignId, productId: { in: [...affected] } } });
-      for (const it of items) await applyItemToProduct(meta, it.productId, it.campaignPrice, parseVariantPrices(it.variantPrices));
+      for (const it of items) {
+        // Modo "costs": dejar costUsdPromo en el producto (como hace applyCampaign).
+        if (campaign.mode === "costs" && it.promoCostUsd != null) {
+          await prisma.product.update({ where: { id: it.productId }, data: { costUsdPromo: it.promoCostUsd } });
+        }
+        await applyItemToProduct(meta, it.productId, it.campaignPrice, parseVariantPrices(it.variantPrices));
+      }
     }
   }
 
