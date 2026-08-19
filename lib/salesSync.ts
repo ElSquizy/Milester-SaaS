@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import { fetchProductsUpdatedSince } from "./tiendanube";
 import { mapOrderFields, mapCustomerFields, mapItemFields } from "./orderMap";
 import { getTiendaNubeClient } from "./tiendanube";
+import { recomputeCustomerStats } from "./customerStats";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -52,6 +53,7 @@ export async function syncOrdersIncremental(storeId: string, accessToken: string
   });
   const tnToLocal = new Map(localProducts.map((p) => [p.tiendaNubeId!, p.id]));
   const customerCache = new Map<string, number>();
+  const affectedCustomers = new Set<number>();
 
   let created = 0;
   let updated = 0;
@@ -76,6 +78,7 @@ export async function syncOrdersIncremental(storeId: string, accessToken: string
         customerCache.set(tnCid, customerId);
       }
     }
+    if (customerId) affectedCustomers.add(customerId);
 
     const items = (o.products || []).map((p: any) => ({
       productTnId: p.product_id ? String(p.product_id) : null,
@@ -138,6 +141,13 @@ export async function syncOrdersIncremental(storeId: string, accessToken: string
         data: { unitsSold: row._sum.quantity ?? 0, lastSoldAt: last?.order.orderedAt ?? null },
       });
     }
+
+    // Recompute customer stats (LTV/recencia/frecuencia). En full: todos los que
+    // tienen pedidos; incremental: solo los tocados en esta corrida.
+    const customersToUpdate = opts.full
+      ? (await prisma.order.findMany({ where: { customerId: { not: null } }, distinct: ["customerId"], select: { customerId: true } })).map((o) => o.customerId!)
+      : [...affectedCustomers];
+    await recomputeCustomerStats(customersToUpdate);
   }
 
   if (settings) {

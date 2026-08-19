@@ -288,6 +288,12 @@ model Customer {
   city           String?
   province       String?
   totalSpentTn   Float?   // TN's own total_spent figure
+  // Stats denormalizadas (excluyen pedidos cancelados), recomputadas en el sync
+  // de ventas y por backfill. Habilitan ordenar/segmentar por LTV y recencia en
+  // SQL sin escanear toda la tabla Order en cada carga. Ver lib/salesSync.
+  totalSpent     Float    @default(0)  // gasto propio calculado (Σ total no cancelado)
+  orderCount     Int      @default(0)  // nº de pedidos no cancelados
+  lastOrderAt    DateTime?             // fecha del último pedido no cancelado
   acceptsMarketing Boolean?
   firstOrderAt   DateTime?
   mergedIntoId   Int?     // if set, this account was merged into another (duplicate)

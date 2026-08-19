@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { normalizePhoneAR } from "@/lib/phoneAR";
+import { recomputeCustomerStats } from "@/lib/customerStats";
 
 /**
  * Manual sales ("pedido de bar"): orders taken outside the web store — WhatsApp,
@@ -144,7 +145,7 @@ export async function createTicket(input: TicketInput) {
   const total = lines.reduce((s, l) => s + l.price * l.quantity, 0);
   const customer = await resolveCustomer(input.customer);
 
-  return prisma.order.create({
+  const order = await prisma.order.create({
     data: {
       tiendaNubeId: null,
       source: "local",
@@ -165,11 +166,13 @@ export async function createTicket(input: TicketInput) {
     },
     include: { items: true, customer: true },
   });
+  await recomputeCustomerStats(order.customerId);
+  return order;
 }
 
 /** Partial edit of a ticket. Replaces the item list when one is given. */
 export async function updateTicket(id: number, input: Partial<TicketInput>) {
-  const existing = await prisma.order.findUnique({ where: { id }, select: { source: true } });
+  const existing = await prisma.order.findUnique({ where: { id }, select: { source: true, customerId: true } });
   if (!existing) throw new Error("Pedido no encontrado");
   if (existing.source !== "local") throw new Error("Solo se pueden editar los pedidos cargados a mano");
 
@@ -183,7 +186,7 @@ export async function updateTicket(id: number, input: Partial<TicketInput>) {
 
   const customer = input.customer ? await resolveCustomer(input.customer) : undefined;
 
-  return prisma.order.update({
+  const order = await prisma.order.update({
     where: { id },
     data: {
       ...(total !== undefined ? { total, subtotal: total } : {}),
@@ -201,6 +204,9 @@ export async function updateTicket(id: number, input: Partial<TicketInput>) {
     },
     include: { items: true, customer: true },
   });
+  // El total o el cliente pudieron cambiar → recomputar el viejo y el nuevo.
+  await recomputeCustomerStats([existing.customerId, order.customerId]);
+  return order;
 }
 
 async function createLines(items: TicketItemInput[]) {
@@ -230,10 +236,11 @@ async function createLines(items: TicketItemInput[]) {
 }
 
 export async function deleteTicket(id: number) {
-  const existing = await prisma.order.findUnique({ where: { id }, select: { source: true } });
+  const existing = await prisma.order.findUnique({ where: { id }, select: { source: true, customerId: true } });
   if (!existing) return;
   if (existing.source !== "local") throw new Error("Solo se pueden borrar los pedidos cargados a mano");
   await prisma.order.delete({ where: { id } });
+  await recomputeCustomerStats(existing.customerId);
 }
 
 /** Open tickets, newest first — what the Inicio strip shows. */

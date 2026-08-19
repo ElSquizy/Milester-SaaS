@@ -57,30 +57,29 @@ export default async function CustomersPage({
     ...(onlyDups ? { id: { in: Array.from(dupCustomerIds) } } : {}),
   };
 
-  const [total, customers, totalsByCustomer] = await Promise.all([
+  // Stats denormalizadas (Fase 0): sin groupBy de toda la tabla Order por carga.
+  const [total, customers] = await Promise.all([
     prisma.customer.count({ where }),
     prisma.customer.findMany({
       where,
       select: {
         id: true, name: true, email: true, phone: true, phoneE164: true,
         identification: true, customerType: true, city: true, province: true,
-        _count: { select: { orders: true } },
+        totalSpent: true, orderCount: true, lastOrderAt: true,
       },
       orderBy: { name: "asc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
-    prisma.order.groupBy({ by: ["customerId"], _sum: { total: true } }),
   ]);
-
-  const totalMap = new Map(totalsByCustomer.map((t) => [t.customerId, t._sum.total || 0]));
 
   const list = customers.map((c) => ({
     id: c.id, name: c.name, email: c.email, phone: c.phone, phoneE164: c.phoneE164,
     identification: c.identification, customerType: c.customerType,
     city: c.city, province: c.province,
-    orderCount: c._count.orders,
-    totalSpent: Math.round(totalMap.get(c.id) || 0),
+    orderCount: c.orderCount,
+    totalSpent: Math.round(c.totalSpent),
+    lastOrderAt: c.lastOrderAt ? c.lastOrderAt.toISOString() : null,
     isDuplicate: dupCustomerIds.has(c.id),
     strongDuplicate: strongDupIds.has(c.id),
   }));
@@ -102,5 +101,5 @@ export type CustomerRow = {
   id: number; name: string; email: string | null; phone: string | null; phoneE164: string | null;
   identification: string | null; customerType: string | null;
   city: string | null; province: string | null;
-  orderCount: number; totalSpent: number; isDuplicate: boolean; strongDuplicate: boolean;
+  orderCount: number; totalSpent: number; lastOrderAt: string | null; isDuplicate: boolean; strongDuplicate: boolean;
 };
