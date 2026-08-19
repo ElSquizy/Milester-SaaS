@@ -1,7 +1,7 @@
 "use client";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import type { Order, OpenOrder } from "./page";
+import type { Order, OpenOrder, SalesSummary } from "./page";
 import SalesSyncButton from "@/components/SalesSyncButton";
 
 interface Props {
@@ -11,6 +11,10 @@ interface Props {
   totalPages: number;
   currentQ: string;
   currentStatus: string;
+  currentSource: string;
+  currentFrom: string;
+  currentTo: string;
+  summary: SalesSummary;
   openOrder: OpenOrder | null;
 }
 
@@ -20,7 +24,7 @@ const STATUS: Record<string, { label: string; color: string; bg: string }> = {
   cancelled: { label: "Cancelada", color: "var(--color-danger)", bg: "var(--color-danger-bg)" },
 };
 
-export default function SalesClient({ orders, total, page, totalPages, currentQ, currentStatus, openOrder }: Props) {
+export default function SalesClient({ orders, total, page, totalPages, currentQ, currentStatus, currentSource, currentFrom, currentTo, summary, openOrder }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -33,6 +37,24 @@ export default function SalesClient({ orders, total, page, totalPages, currentQ,
     p.delete("order");
     router.push(`${pathname}?${p.toString()}`);
   }
+  // Setea varios params de una (para los presets de fecha).
+  function setParams(entries: Record<string, string>) {
+    const p = new URLSearchParams(searchParams.toString());
+    for (const [k, v] of Object.entries(entries)) { if (v) p.set(k, v); else p.delete(k); }
+    p.delete("page"); p.delete("order");
+    router.push(`${pathname}?${p.toString()}`);
+  }
+  // Presets: rango [desde, hasta] en fechas AR (YYYY-MM-DD).
+  function preset(days: number | "month") {
+    const now = new Date();
+    const ar = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const y = ar.getUTCFullYear(), m = ar.getUTCMonth(), d = ar.getUTCDate();
+    const iso = (dt: Date) => dt.toISOString().slice(0, 10);
+    const today = new Date(Date.UTC(y, m, d));
+    const fromD = days === "month" ? new Date(Date.UTC(y, m, 1)) : new Date(Date.UTC(y, m, d - (days - 1)));
+    setParams({ from: iso(fromD), to: iso(today) });
+  }
+  const hasDates = !!(currentFrom || currentTo);
   function openOrderPanel(id: number) {
     const p = new URLSearchParams(searchParams.toString());
     p.set("order", String(id));
@@ -62,21 +84,48 @@ export default function SalesClient({ orders, total, page, totalPages, currentQ,
           </div>
           <SalesSyncButton />
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <input
             value={localQ}
             onChange={(e) => setLocalQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") setParam("q", localQ); }}
             onBlur={() => { if (localQ !== currentQ) setParam("q", localQ); }}
             placeholder="Buscar por cliente..."
-            style={{ flex: 1, maxWidth: 300, padding: "7px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface-2)", fontSize: "0.875rem", color: "var(--color-ink)", outline: "none" }}
+            style={{ flex: 1, minWidth: 180, maxWidth: 260, padding: "7px 12px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface-2)", fontSize: "0.875rem", color: "var(--color-ink)", outline: "none" }}
           />
-          <select value={currentStatus} onChange={(e) => setParam("status", e.target.value)} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface-2)", fontSize: "0.875rem", color: "var(--color-ink)", cursor: "pointer" }}>
+          <select value={currentStatus} onChange={(e) => setParam("status", e.target.value)} style={selStyle}>
             <option value="">Todos los estados</option>
             <option value="open">Abiertas</option>
             <option value="closed">Cerradas</option>
             <option value="cancelled">Canceladas</option>
           </select>
+          <select value={currentSource} onChange={(e) => setParam("source", e.target.value)} style={selStyle}>
+            <option value="">Todo origen</option>
+            <option value="tiendanube">Web</option>
+            <option value="local">Manual</option>
+          </select>
+          <input type="date" value={currentFrom} max={currentTo || undefined} onChange={(e) => setParam("from", e.target.value)} aria-label="Desde" style={selStyle} />
+          <span style={{ color: "var(--color-subtle)", fontSize: "0.8125rem" }}>→</span>
+          <input type="date" value={currentTo} min={currentFrom || undefined} onChange={(e) => setParam("to", e.target.value)} aria-label="Hasta" style={selStyle} />
+          {(["30", "90"] as const).map((d) => (
+            <button key={d} onClick={() => preset(Number(d))} style={presetBtn}>{d}d</button>
+          ))}
+          <button onClick={() => preset("month")} style={presetBtn}>Mes</button>
+          {hasDates && <button onClick={() => setParams({ from: "", to: "" })} style={{ ...presetBtn, color: "var(--color-danger)" }}>Limpiar</button>}
+        </div>
+
+        {/* Franja resumen — ventas no canceladas del filtro actual */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10, marginTop: 14 }}>
+          {[
+            { label: "Facturado", value: `$${summary.revenue.toLocaleString("es-AR")}` },
+            { label: "Ventas", value: summary.count.toLocaleString("es-AR") },
+            { label: "Ticket promedio", value: `$${summary.avgTicket.toLocaleString("es-AR")}` },
+          ].map((s) => (
+            <div key={s.label} style={{ padding: "10px 14px", borderRadius: 10, background: "var(--color-surface-2)", border: "1px solid var(--color-divider)" }}>
+              <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.03em" }}>{s.label}</div>
+              <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.02em", marginTop: 2 }}>{s.value}</div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -311,6 +360,8 @@ function fmtDateTime(d: string) {
   return new Date(d).toLocaleDateString("es-AR", { day: "numeric", month: "short", year: "2-digit" });
 }
 
+const selStyle: React.CSSProperties = { padding: "7px 10px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface-2)", fontSize: "0.875rem", color: "var(--color-ink)", cursor: "pointer" };
+const presetBtn: React.CSSProperties = { padding: "7px 10px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-muted)", cursor: "pointer" };
 const th: React.CSSProperties = { padding: "10px 12px", fontSize: "0.75rem", fontWeight: 500, color: "var(--color-subtle)", whiteSpace: "nowrap", textAlign: "right" };
 const td: React.CSSProperties = { padding: "11px 12px", verticalAlign: "middle" };
 const pageBtn = (active: boolean): React.CSSProperties => ({

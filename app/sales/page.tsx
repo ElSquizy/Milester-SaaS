@@ -5,6 +5,18 @@ import SalesClient from "./SalesClient";
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 50;
 
+/** Medianoche AR (UTC-3) del día (y, m, d) como instante UTC. */
+function arMidnight(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m, d, 3, 0, 0));
+}
+/** Rango [from, to) desde YYYY-MM-DD (to inclusivo → +1 día). null si no aplica. */
+function dayBound(str: string | undefined, endOfDay: boolean): Date | null {
+  if (!str) return null;
+  const [y, m, d] = str.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  return arMidnight(y, m - 1, endOfDay ? d + 1 : d);
+}
+
 export default async function SalesPage({
   searchParams,
 }: {
@@ -16,15 +28,29 @@ export default async function SalesPage({
   const sp = await searchParams;
   const q = sp.q?.trim() || "";
   const status = sp.status || "";
+  const source = sp.source || "";
+  const from = sp.from || "";
+  const to = sp.to || "";
   const page = Math.max(1, parseInt(sp.page || "1", 10));
   const openId = sp.order ? parseInt(sp.order, 10) : null;
 
-  const where = {
-    ...(q ? { customerName: { contains: q } } : {}),
-    ...(status ? { status } : {}),
-  };
+  const fromDate = dayBound(from, false);
+  const toDate = dayBound(to, true);
+  const dateFilter = fromDate || toDate
+    ? { orderedAt: { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lt: toDate } : {}) } }
+    : {};
 
-  const [total, orders] = await Promise.all([
+  // Filtros base (compartidos por lista y resumen): búsqueda, origen, fechas.
+  const baseWhere = {
+    ...(q ? { customerName: { contains: q } } : {}),
+    ...(source ? { source } : {}),
+    ...dateFilter,
+  };
+  // La lista suma el filtro de estado; el resumen (dinero) siempre excluye cancelados.
+  const where = { ...baseWhere, ...(status ? { status } : {}) };
+  const summaryWhere = { ...baseWhere, status: { not: "cancelled" } };
+
+  const [total, orders, summary] = await Promise.all([
     prisma.order.count({ where }),
     prisma.order.findMany({
       where,
@@ -37,7 +63,16 @@ export default async function SalesPage({
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
+    prisma.order.aggregate({ where: summaryWhere, _sum: { total: true }, _count: true }),
   ]);
+
+  const revenue = summary._sum.total ?? 0;
+  const salesCount = summary._count;
+  const summaryData = {
+    revenue: Math.round(revenue),
+    count: salesCount,
+    avgTicket: salesCount ? Math.round(revenue / salesCount) : 0,
+  };
 
   let openOrder: OpenOrder | null = null;
   if (openId) {
@@ -79,10 +114,16 @@ export default async function SalesPage({
       totalPages={Math.ceil(total / PAGE_SIZE)}
       currentQ={q}
       currentStatus={status}
+      currentSource={source}
+      currentFrom={from}
+      currentTo={to}
+      summary={summaryData}
       openOrder={openOrder}
     />
   );
 }
+
+export type SalesSummary = { revenue: number; count: number; avgTicket: number };
 
 export type Order = {
   id: number; number: number | null; total: number; status: string;
