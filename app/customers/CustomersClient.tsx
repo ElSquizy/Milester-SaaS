@@ -3,6 +3,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { CustomerRow } from "./page";
 import SalesSyncButton from "@/components/SalesSyncButton";
+import { SEGMENTS, SEGMENT_LABEL, SEGMENT_TONE, type Segment } from "@/lib/customerSegments";
 
 interface Props {
   customers: CustomerRow[];
@@ -12,6 +13,27 @@ interface Props {
   currentQ: string;
   onlyDups: boolean;
   dupTotal: number;
+  currentSort: string;
+  currentSegment: string;
+  segmentCounts: Record<Segment, number>;
+}
+
+const SORT_OPTS: { v: string; label: string }[] = [
+  { v: "name", label: "Nombre A → Z" },
+  { v: "ltv", label: "Mayor gasto (LTV)" },
+  { v: "recent", label: "Última compra" },
+  { v: "frequency", label: "Más compras" },
+];
+
+/** Fecha relativa corta para "última compra". */
+function relDate(iso: string | null): string {
+  if (!iso) return "sin compras";
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return "hoy";
+  if (days === 1) return "ayer";
+  if (days < 30) return `hace ${days} d`;
+  if (days < 365) return `hace ${Math.floor(days / 30)} m`;
+  return `hace ${Math.floor(days / 365)} a`;
 }
 
 type Detail = {
@@ -37,7 +59,7 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function CustomersClient({ customers, total, page, totalPages, currentQ, onlyDups, dupTotal }: Props) {
+export default function CustomersClient({ customers, total, page, totalPages, currentQ, onlyDups, dupTotal, currentSort, currentSegment, segmentCounts }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -108,6 +130,25 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
             Solo duplicados
           </button>
+          <select value={currentSort} onChange={(e) => setParam("sort", e.target.value === "name" ? "" : e.target.value)}
+            style={{ marginLeft: "auto", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--color-border)", background: "var(--color-surface-2)", fontSize: "0.8125rem", color: "var(--color-ink)", cursor: "pointer" }}>
+            {SORT_OPTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+        </div>
+
+        {/* Chips de segmento (RFM) */}
+        <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+          <button onClick={() => setParam("segment", "")} style={segChip(currentSegment === "", null)}>Todos</button>
+          {SEGMENTS.map((s) => {
+            const on = currentSegment === s;
+            const tone = SEGMENT_TONE[s];
+            return (
+              <button key={s} onClick={() => setParam("segment", on ? "" : s)} style={segChip(on, tone)}>
+                {SEGMENT_LABEL[s]}
+                <span style={{ marginLeft: 6, fontVariantNumeric: "tabular-nums", opacity: 0.8 }}>{(segmentCounts[s] ?? 0).toLocaleString("es-AR")}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -136,6 +177,9 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
                       {c.strongDuplicate
                         ? <span className="pill pill-danger" style={{ fontSize: "0.625rem", fontWeight: 700, padding: "2px 7px", flexShrink: 0 }}>MISMO DNI</span>
                         : c.isDuplicate && <span className="pill pill-warning" style={{ fontSize: "0.625rem", fontWeight: 700, padding: "2px 7px", flexShrink: 0 }}>POSIBLE DUPLICADO</span>}
+                      {c.segment !== "sin_compras" && (
+                        <span style={{ fontSize: "0.625rem", fontWeight: 700, padding: "2px 7px", borderRadius: "var(--radius-pill)", flexShrink: 0, letterSpacing: "0.02em", background: SEGMENT_TONE[c.segment].bg, color: SEGMENT_TONE[c.segment].fg }}>{SEGMENT_LABEL[c.segment].toUpperCase()}</span>
+                      )}
                     </div>
                     {(secondary || c.phoneE164) && (
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, minWidth: 0 }}>
@@ -159,6 +203,7 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <div style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>${c.totalSpent.toLocaleString("es-AR")}</div>
                     <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums" }}>{c.orderCount} {c.orderCount === 1 ? "compra" : "compras"}</div>
+                    {c.orderCount > 0 && <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)" }}>{relDate(c.lastOrderAt)}</div>}
                   </div>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-faint)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: open ? "none" : "rotate(-90deg)", transition: "transform 0.15s" }}><polyline points="6 9 12 15 18 9" /></svg>
                 </div>
@@ -219,6 +264,15 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
       </div>
     </div>
   );
+}
+
+function segChip(active: boolean, tone: { fg: string; bg: string } | null): React.CSSProperties {
+  return {
+    cursor: "pointer", padding: "5px 11px", borderRadius: "var(--radius-pill)", fontSize: "0.75rem", fontWeight: 600,
+    border: "1px solid " + (active ? (tone?.fg ?? "var(--color-brand)") : "var(--color-border)"),
+    background: active ? (tone?.bg ?? "var(--color-brand-light)") : "var(--color-surface)",
+    color: active ? (tone?.fg ?? "var(--color-brand)") : "var(--color-muted)",
+  };
 }
 
 function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {

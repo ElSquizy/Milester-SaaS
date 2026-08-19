@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import CustomersClient from "./CustomersClient";
+import { SEGMENTS, type Segment, segmentWhere, segmentOf, dormantCutoff } from "@/lib/customerSegments";
+import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 const PAGE_SIZE = 50;
@@ -20,7 +22,10 @@ export default async function CustomersPage({
   const sp = await searchParams;
   const q = sp.q?.trim() || "";
   const onlyDups = sp.dups === "1";
+  const sort = sp.sort || "name";
+  const segment = (SEGMENTS as readonly string[]).includes(sp.segment || "") ? (sp.segment as Segment) : "";
   const page = Math.max(1, parseInt(sp.page || "1", 10));
+  const cutoff = dormantCutoff();
 
   // Detect potential duplicates across ALL customers.
   // DNI/CUIT (identification) is the strongest signal; email and normalized name are softer fallbacks.
@@ -52,13 +57,21 @@ export default async function CustomersPage({
     if (strong || weak) dupCustomerIds.add(c.id);
   }
 
-  const where = {
+  // Filtros base (búsqueda + duplicados) — compartidos por la lista y los conteos por segmento.
+  const baseWhere: Prisma.CustomerWhereInput = {
     ...(q ? { OR: [{ name: { contains: q } }, { email: { contains: q } }] } : {}),
     ...(onlyDups ? { id: { in: Array.from(dupCustomerIds) } } : {}),
   };
+  const where: Prisma.CustomerWhereInput = { ...baseWhere, ...(segment ? segmentWhere(segment, cutoff) : {}) };
+
+  const orderBy: Prisma.CustomerOrderByWithRelationInput =
+    sort === "ltv" ? { totalSpent: "desc" }
+    : sort === "recent" ? { lastOrderAt: { sort: "desc", nulls: "last" } }
+    : sort === "frequency" ? { orderCount: "desc" }
+    : { name: "asc" };
 
   // Stats denormalizadas (Fase 0): sin groupBy de toda la tabla Order por carga.
-  const [total, customers] = await Promise.all([
+  const [total, customers, segmentCounts] = await Promise.all([
     prisma.customer.count({ where }),
     prisma.customer.findMany({
       where,
@@ -67,10 +80,13 @@ export default async function CustomersPage({
         identification: true, customerType: true, city: true, province: true,
         totalSpent: true, orderCount: true, lastOrderAt: true,
       },
-      orderBy: { name: "asc" },
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
+    // Conteo por segmento sobre el filtro base (para los chips).
+    Promise.all(SEGMENTS.map((s) => prisma.customer.count({ where: { ...baseWhere, ...segmentWhere(s, cutoff) } })))
+      .then((counts) => Object.fromEntries(SEGMENTS.map((s, i) => [s, counts[i]])) as Record<Segment, number>),
   ]);
 
   const list = customers.map((c) => ({
@@ -80,6 +96,7 @@ export default async function CustomersPage({
     orderCount: c.orderCount,
     totalSpent: Math.round(c.totalSpent),
     lastOrderAt: c.lastOrderAt ? c.lastOrderAt.toISOString() : null,
+    segment: segmentOf({ orderCount: c.orderCount, totalSpent: c.totalSpent, lastOrderAt: c.lastOrderAt }, cutoff),
     isDuplicate: dupCustomerIds.has(c.id),
     strongDuplicate: strongDupIds.has(c.id),
   }));
@@ -93,6 +110,9 @@ export default async function CustomersPage({
       currentQ={q}
       onlyDups={onlyDups}
       dupTotal={dupCustomerIds.size}
+      currentSort={sort}
+      currentSegment={segment}
+      segmentCounts={segmentCounts}
     />
   );
 }
@@ -101,5 +121,6 @@ export type CustomerRow = {
   id: number; name: string; email: string | null; phone: string | null; phoneE164: string | null;
   identification: string | null; customerType: string | null;
   city: string | null; province: string | null;
-  orderCount: number; totalSpent: number; lastOrderAt: string | null; isDuplicate: boolean; strongDuplicate: boolean;
+  orderCount: number; totalSpent: number; lastOrderAt: string | null; segment: Segment;
+  isDuplicate: boolean; strongDuplicate: boolean;
 };
