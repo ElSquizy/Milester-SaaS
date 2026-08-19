@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import CustomersClient from "./CustomersClient";
-import { SEGMENTS, type Segment, segmentWhere, segmentOf, dormantCutoff } from "@/lib/customerSegments";
+import { SEGMENTS, type Segment, segmentWhere, segmentOf, dormantCutoff, parseSegmentConfig } from "@/lib/customerSegments";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,8 @@ export default async function CustomersPage({
   const sort = sp.sort || "name";
   const segment = (SEGMENTS as readonly string[]).includes(sp.segment || "") ? (sp.segment as Segment) : "";
   const page = Math.max(1, parseInt(sp.page || "1", 10));
-  const cutoff = dormantCutoff();
+  const segCfg = parseSegmentConfig(settings.segmentConfig);
+  const cutoff = dormantCutoff(segCfg);
 
   // Detect potential duplicates across ALL customers.
   // DNI/CUIT (identification) is the strongest signal; email and normalized name are softer fallbacks.
@@ -62,7 +63,7 @@ export default async function CustomersPage({
     ...(q ? { OR: [{ name: { contains: q } }, { email: { contains: q } }] } : {}),
     ...(onlyDups ? { id: { in: Array.from(dupCustomerIds) } } : {}),
   };
-  const where: Prisma.CustomerWhereInput = { ...baseWhere, ...(segment ? segmentWhere(segment, cutoff) : {}) };
+  const where: Prisma.CustomerWhereInput = { ...baseWhere, ...(segment ? segmentWhere(segment, cutoff, segCfg) : {}) };
 
   const orderBy: Prisma.CustomerOrderByWithRelationInput =
     sort === "ltv" ? { totalSpent: "desc" }
@@ -85,7 +86,7 @@ export default async function CustomersPage({
       take: PAGE_SIZE,
     }),
     // Conteo por segmento sobre el filtro base (para los chips).
-    Promise.all(SEGMENTS.map((s) => prisma.customer.count({ where: { ...baseWhere, ...segmentWhere(s, cutoff) } })))
+    Promise.all(SEGMENTS.map((s) => prisma.customer.count({ where: { ...baseWhere, ...segmentWhere(s, cutoff, segCfg) } })))
       .then((counts) => Object.fromEntries(SEGMENTS.map((s, i) => [s, counts[i]])) as Record<Segment, number>),
   ]);
 
@@ -96,7 +97,7 @@ export default async function CustomersPage({
     orderCount: c.orderCount,
     totalSpent: Math.round(c.totalSpent),
     lastOrderAt: c.lastOrderAt ? c.lastOrderAt.toISOString() : null,
-    segment: segmentOf({ orderCount: c.orderCount, totalSpent: c.totalSpent, lastOrderAt: c.lastOrderAt }, cutoff),
+    segment: segmentOf({ orderCount: c.orderCount, totalSpent: c.totalSpent, lastOrderAt: c.lastOrderAt }, cutoff, segCfg),
     isDuplicate: dupCustomerIds.has(c.id),
     strongDuplicate: strongDupIds.has(c.id),
   }));
@@ -113,6 +114,7 @@ export default async function CustomersPage({
       currentSort={sort}
       currentSegment={segment}
       segmentCounts={segmentCounts}
+      segmentConfig={segCfg}
     />
   );
 }

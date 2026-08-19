@@ -5,9 +5,24 @@ import { Prisma } from "@prisma/client";
  * (totalSpent, orderCount, lastOrderAt — ver Fase 0). Umbrales parametrizados:
  * cambiá estas constantes para ajustar los cortes al negocio.
  */
-export const DORMANT_DAYS = 90;     // sin comprar hace N días → dormido / en riesgo
-export const VIP_MIN_SPENT = 200000; // gasto total ≥ → VIP
-export const VIP_MIN_ORDERS = 5;     // o cantidad de compras ≥ → VIP
+/** Umbrales editables por el usuario (persistidos en Settings.segmentConfig). */
+export type SegmentConfig = { dormantDays: number; vipMinSpent: number; vipMinOrders: number };
+export const DEFAULT_SEGMENT_CONFIG: SegmentConfig = { dormantDays: 90, vipMinSpent: 200000, vipMinOrders: 5 };
+
+/** Parsea + saneala config desde el JSON de Settings (merge con defaults, valores válidos). */
+export function parseSegmentConfig(json: string | null | undefined): SegmentConfig {
+  let raw: Partial<SegmentConfig> = {};
+  try { raw = JSON.parse(json || "{}"); } catch { /* usa defaults */ }
+  const num = (v: unknown, def: number, min: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= min ? Math.round(n) : def;
+  };
+  return {
+    dormantDays: num(raw.dormantDays, DEFAULT_SEGMENT_CONFIG.dormantDays, 1),
+    vipMinSpent: num(raw.vipMinSpent, DEFAULT_SEGMENT_CONFIG.vipMinSpent, 0),
+    vipMinOrders: num(raw.vipMinOrders, DEFAULT_SEGMENT_CONFIG.vipMinOrders, 1),
+  };
+}
 
 export const SEGMENTS = ["vip", "recurrente", "nuevo", "dormido", "sin_compras"] as const;
 export type Segment = (typeof SEGMENTS)[number];
@@ -29,13 +44,13 @@ export const SEGMENT_TONE: Record<Segment, { fg: string; bg: string }> = {
   sin_compras: { fg: "var(--color-subtle)", bg: "var(--color-surface-2)" },
 };
 
-/** Instante de corte para "dormido" (ahora − DORMANT_DAYS). */
-export function dormantCutoff(now = new Date()): Date {
-  return new Date(now.getTime() - DORMANT_DAYS * 24 * 60 * 60 * 1000);
+/** Instante de corte para "dormido" (ahora − dormantDays). */
+export function dormantCutoff(cfg: SegmentConfig, now = new Date()): Date {
+  return new Date(now.getTime() - cfg.dormantDays * 24 * 60 * 60 * 1000);
 }
 
 /** Where-clause SQL de un segmento (mutuamente excluyentes). */
-export function segmentWhere(seg: Segment, cutoff: Date): Prisma.CustomerWhereInput {
+export function segmentWhere(seg: Segment, cutoff: Date, cfg: SegmentConfig): Prisma.CustomerWhereInput {
   switch (seg) {
     case "sin_compras":
       return { orderCount: 0 };
@@ -44,29 +59,29 @@ export function segmentWhere(seg: Segment, cutoff: Date): Prisma.CustomerWhereIn
     case "vip":
       return {
         lastOrderAt: { gte: cutoff },
-        OR: [{ totalSpent: { gte: VIP_MIN_SPENT } }, { orderCount: { gte: VIP_MIN_ORDERS } }],
+        OR: [{ totalSpent: { gte: cfg.vipMinSpent } }, { orderCount: { gte: cfg.vipMinOrders } }],
       };
     case "recurrente":
       return {
         lastOrderAt: { gte: cutoff },
-        orderCount: { gte: 2, lt: VIP_MIN_ORDERS },
-        totalSpent: { lt: VIP_MIN_SPENT },
+        orderCount: { gte: 2, lt: cfg.vipMinOrders },
+        totalSpent: { lt: cfg.vipMinSpent },
       };
     case "nuevo":
       return {
         lastOrderAt: { gte: cutoff },
         orderCount: 1,
-        totalSpent: { lt: VIP_MIN_SPENT },
+        totalSpent: { lt: cfg.vipMinSpent },
       };
   }
 }
 
 /** Clasifica un cliente (mismo criterio que segmentWhere, para el badge de la fila). */
-export function segmentOf(c: { orderCount: number; totalSpent: number; lastOrderAt: Date | null }, cutoff: Date): Segment {
+export function segmentOf(c: { orderCount: number; totalSpent: number; lastOrderAt: Date | null }, cutoff: Date, cfg: SegmentConfig): Segment {
   if (c.orderCount === 0) return "sin_compras";
   const active = c.lastOrderAt != null && c.lastOrderAt.getTime() >= cutoff.getTime();
   if (!active) return "dormido";
-  if (c.totalSpent >= VIP_MIN_SPENT || c.orderCount >= VIP_MIN_ORDERS) return "vip";
+  if (c.totalSpent >= cfg.vipMinSpent || c.orderCount >= cfg.vipMinOrders) return "vip";
   if (c.orderCount >= 2) return "recurrente";
   return "nuevo";
 }

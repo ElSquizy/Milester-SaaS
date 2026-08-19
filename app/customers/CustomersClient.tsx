@@ -3,7 +3,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { CustomerRow } from "./page";
 import SalesSyncButton from "@/components/SalesSyncButton";
-import { SEGMENTS, SEGMENT_LABEL, SEGMENT_TONE, type Segment } from "@/lib/customerSegments";
+import { SEGMENTS, SEGMENT_LABEL, SEGMENT_TONE, type Segment, type SegmentConfig } from "@/lib/customerSegments";
 
 interface Props {
   customers: CustomerRow[];
@@ -16,6 +16,7 @@ interface Props {
   currentSort: string;
   currentSegment: string;
   segmentCounts: Record<Segment, number>;
+  segmentConfig: SegmentConfig;
 }
 
 const SORT_OPTS: { v: string; label: string }[] = [
@@ -59,13 +60,25 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function CustomersClient({ customers, total, page, totalPages, currentQ, onlyDups, dupTotal, currentSort, currentSegment, segmentCounts }: Props) {
+export default function CustomersClient({ customers, total, page, totalPages, currentQ, onlyDups, dupTotal, currentSort, currentSegment, segmentCounts, segmentConfig }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [localQ, setLocalQ] = useState(currentQ);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [details, setDetails] = useState<Record<number, Detail | "loading">>({});
+  const [cfgOpen, setCfgOpen] = useState(false);
+  const [cfg, setCfg] = useState<SegmentConfig>(segmentConfig);
+  const [savingCfg, setSavingCfg] = useState(false);
+
+  async function saveCfg() {
+    setSavingCfg(true);
+    try {
+      await fetch("/api/customer-segments", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cfg) });
+      setCfgOpen(false);
+      router.refresh(); // recalcula segmentos y conteos con los nuevos umbrales
+    } finally { setSavingCfg(false); }
+  }
 
   function setParam(key: string, value: string) {
     const p = new URLSearchParams(searchParams.toString());
@@ -149,7 +162,25 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
               </button>
             );
           })}
+          <button onClick={() => { setCfg(segmentConfig); setCfgOpen((v) => !v); }} title="Ajustar umbrales de segmentación"
+            style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px", borderRadius: "var(--radius-pill)", border: "1px solid var(--color-border)", background: "var(--color-surface)", fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", cursor: "pointer" }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" /><line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" /><line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" /><line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" /></svg>
+            Umbrales
+          </button>
         </div>
+
+        {/* Editor de umbrales de segmentación */}
+        {cfgOpen && (
+          <div style={{ marginTop: 10, padding: "14px 16px", borderRadius: "var(--radius-control)", border: "1px solid var(--color-border)", background: "var(--color-surface-2)", display: "flex", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+            <CfgField label="Dormido a los (días)" value={cfg.dormantDays} min={1} onChange={(v) => setCfg((c) => ({ ...c, dormantDays: v }))} />
+            <CfgField label="VIP: gasto ≥ ($)" value={cfg.vipMinSpent} min={0} step={10000} onChange={(v) => setCfg((c) => ({ ...c, vipMinSpent: v }))} />
+            <CfgField label="VIP: o compras ≥" value={cfg.vipMinOrders} min={1} onChange={(v) => setCfg((c) => ({ ...c, vipMinOrders: v }))} />
+            <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+              <button className="btn-secondary" onClick={() => setCfgOpen(false)} disabled={savingCfg}>Cancelar</button>
+              <button className="btn-primary" onClick={saveCfg} disabled={savingCfg}>{savingCfg ? "Guardando…" : "Guardar"}</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -263,6 +294,17 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
         )}
       </div>
     </div>
+  );
+}
+
+function CfgField({ label, value, min, step, onChange }: { label: string; value: number; min: number; step?: number; onChange: (v: number) => void }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-muted)" }}>
+      {label}
+      <input type="number" className="input" value={value} min={min} step={step ?? 1}
+        onChange={(e) => { const n = Number(e.target.value); onChange(Number.isFinite(n) ? Math.max(min, n) : min); }}
+        style={{ width: 130, fontVariantNumeric: "tabular-nums", background: "var(--color-surface)" }} />
+    </label>
   );
 }
 

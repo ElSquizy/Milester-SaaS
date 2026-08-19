@@ -15,6 +15,7 @@ model Settings {
   oauthState        String?  // CSRF state for the in-progress OAuth flow
   anthropicApiKey   String?
   pricing           String   @default("{}") // JSON: config del módulo de precios (dólar, franjas, pila de impuestos, cuotas) — ver lib/pricing.ts
+  segmentConfig     String   @default("{}") // JSON: umbrales de segmentación de clientes (días dormido, gasto/compras VIP) — ver lib/customerSegments.ts
   tnApiError        String?  // null = ok · "unauthorized" (401) · "payment_required" (402) — ver lib/tnHealth
   tnApiErrorAt      DateTime?
   lastChangeCheckAt DateTime? // last time we scanned TN for incoming product changes
