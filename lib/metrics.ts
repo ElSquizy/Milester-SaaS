@@ -431,3 +431,84 @@ export async function getBreakdowns(range: ResolvedRange): Promise<Breakdowns> {
     categories: map(categoryRaw),
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 4 — Tier 2: heatmap día×hora, embudo/cancelaciones, efectividad de campañas
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type HeatCell = { weekday: number; hour: number; revenue: number; orders: number };
+export type FunnelData = {
+  total: number;
+  cancelled: number;
+  cancelledPct: number;
+  byStatus: { status: string; count: number; revenue: number }[];
+};
+export type CampaignEffect = {
+  id: number; name: string; from: string; to: string; active: boolean;
+  revenueDuring: number; ordersDuring: number; revenueBefore: number; liftPct: number | null;
+};
+
+/** Ventas por día de semana × hora (AR), para un heatmap de "cuándo se vende". */
+export async function getHeatmap(range: ResolvedRange): Promise<HeatCell[]> {
+  const fromIso = range.from.toISOString();
+  const toIso = range.to.toISOString();
+  const rows = await prisma.$queryRaw<Array<{ wd: string; hr: string; revenue: number; orders: number | bigint }>>(Prisma.sql`
+    SELECT strftime('%w', orderedAt, '-3 hours') AS wd,
+           strftime('%H', orderedAt, '-3 hours') AS hr,
+           CAST(COALESCE(SUM(total), 0) AS REAL) AS revenue,
+           COUNT(*) AS orders
+    FROM "Order"
+    WHERE status <> 'cancelled'
+      AND datetime(orderedAt) >= datetime(${fromIso}) AND datetime(orderedAt) < datetime(${toIso})
+    GROUP BY wd, hr`);
+  return rows.map((r) => ({ weekday: Number(r.wd), hour: Number(r.hr), revenue: r.revenue, orders: Number(r.orders) }));
+}
+
+/** Embudo por estado + tasa de cancelación en el rango. */
+export async function getFunnel(range: ResolvedRange): Promise<FunnelData> {
+  const rows = await prisma.order.groupBy({
+    by: ["status"],
+    where: { orderedAt: { gte: range.from, lt: range.to } },
+    _count: true,
+    _sum: { total: true },
+  });
+  const byStatus = rows.map((r) => ({ status: r.status, count: r._count, revenue: r._sum.total ?? 0 }))
+    .sort((a, b) => b.count - a.count);
+  const total = byStatus.reduce((s, r) => s + r.count, 0);
+  const cancelled = byStatus.find((r) => r.status === "cancelled")?.count ?? 0;
+  return { total, cancelled, cancelledPct: total ? Math.round((cancelled / total) * 1000) / 10 : 0, byStatus };
+}
+
+/**
+ * Efectividad de campañas: facturación DURANTE la campaña vs. una ventana de
+ * igual duración ANTES de que empiece (lift). Independiente del filtro de fechas.
+ */
+export async function getCampaignEffectiveness(): Promise<CampaignEffect[]> {
+  const campaigns = await prisma.campaign.findMany({
+    where: { appliedAt: { not: null } },
+    orderBy: { appliedAt: "desc" },
+    take: 8,
+    select: { id: true, name: true, status: true, appliedAt: true, endedAt: true },
+  });
+
+  const out: CampaignEffect[] = [];
+  for (const c of campaigns) {
+    const start = c.appliedAt!;
+    const end = c.endedAt ?? new Date();
+    const durationMs = Math.max(end.getTime() - start.getTime(), DAY_MS);
+    const beforeStart = new Date(start.getTime() - durationMs);
+
+    const [during, before] = await Promise.all([
+      prisma.order.aggregate({ where: { status: { not: "cancelled" }, orderedAt: { gte: start, lt: end } }, _sum: { total: true }, _count: true }),
+      prisma.order.aggregate({ where: { status: { not: "cancelled" }, orderedAt: { gte: beforeStart, lt: start } }, _sum: { total: true } }),
+    ]);
+    const revenueDuring = during._sum.total ?? 0;
+    const revenueBefore = before._sum.total ?? 0;
+    out.push({
+      id: c.id, name: c.name, from: start.toISOString(), to: end.toISOString(), active: c.status === "active",
+      revenueDuring, ordersDuring: during._count, revenueBefore,
+      liftPct: revenueBefore > 0 ? Math.round(((revenueDuring - revenueBefore) / revenueBefore) * 1000) / 10 : null,
+    });
+  }
+  return out;
+}

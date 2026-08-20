@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
-import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals, type Projection, type Insights, type Breakdowns, type BucketRow } from "@/lib/metrics";
+import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals, type Projection, type Insights, type Breakdowns, type BucketRow, type HeatCell, type FunnelData, type CampaignEffect } from "@/lib/metrics";
 
 // Paleta para el desglose por canal — el resto del sistema es mono-brand.
 const BRAND = "var(--color-brand)";
@@ -43,11 +43,12 @@ function delta(cur: number, prev: number): number | null {
 const H2: React.CSSProperties = { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "0 0 12px" };
 
 export default function MetricsClient({
-  preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource, projection, insights, breakdowns,
+  preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource, projection, insights, breakdowns, heatmap, funnel, campaignEffects,
 }: {
   preset: Preset; fromDay: string; toDay: string; granularity: Granularity;
   current: Totals; previous: Totals; series: SeriesPoint[]; topProducts: TopProduct[]; bySource: SourceSlice[];
   projection: Projection; insights: Insights; breakdowns: Breakdowns;
+  heatmap: HeatCell[]; funnel: FunnelData; campaignEffects: CampaignEffect[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -264,8 +265,15 @@ export default function MetricsClient({
 
             {/* Retención + plataforma/tipo/colección (Fase 3) */}
             <BreakdownsSection breakdowns={breakdowns} />
+
+            {/* Cuándo se vende + embudo (Fase 4) */}
+            <HeatmapSection cells={heatmap} />
+            <FunnelSection funnel={funnel} />
           </>
         )}
+
+        {/* Efectividad de campañas (Fase 4) — independiente del rango */}
+        <CampaignEffectSection effects={campaignEffects} />
 
         {/* Insights y sugerencias de promos (Fase 2) */}
         <InsightsSection insights={insights} />
@@ -392,6 +400,120 @@ function BreakdownBars({ title, hint, rows, colorOf }: { title: string; hint: st
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const WD_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+function HeatmapSection({ cells }: { cells: HeatCell[] }) {
+  const byKey = new Map(cells.map((c) => [`${c.weekday}:${c.hour}`, c]));
+  const max = Math.max(1, ...cells.map((c) => c.orders));
+  const total = cells.reduce((s, c) => s + c.orders, 0);
+  if (total === 0) return null;
+  // Horas con actividad para no dibujar 24 columnas muertas: min..max hora con ventas.
+  const hoursWithData = cells.filter((c) => c.orders > 0).map((c) => c.hour);
+  const minH = Math.min(...hoursWithData), maxH = Math.max(...hoursWithData);
+  const hours = Array.from({ length: maxH - minH + 1 }, (_, i) => minH + i);
+
+  return (
+    <div className="anim-up delay-3" style={{ marginTop: 40 }}>
+      <h2 style={H2}>Cuándo se vende · día × hora</h2>
+      <div className="card" style={{ padding: "16px 18px", overflowX: "auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: `34px repeat(${hours.length}, 1fr)`, gap: 2, minWidth: hours.length * 22 + 34 }}>
+          <div />
+          {hours.map((h) => <div key={h} style={{ fontSize: "0.5625rem", color: "var(--color-subtle)", textAlign: "center", fontVariantNumeric: "tabular-nums" }}>{h}</div>)}
+          {[1, 2, 3, 4, 5, 6, 0].map((wd) => (
+            <Fragment key={wd}>
+              <div style={{ fontSize: "0.625rem", color: "var(--color-subtle)", display: "flex", alignItems: "center" }}>{WD_SHORT[wd]}</div>
+              {hours.map((h) => {
+                const cell = byKey.get(`${wd}:${h}`);
+                const o = cell?.orders ?? 0;
+                const a = o === 0 ? 0 : 0.12 + 0.88 * (o / max);
+                return (
+                  <div key={h} title={`${WD_SHORT[wd]} ${h}:00 · ${num(o)} ventas · ${money(cell?.revenue ?? 0)}`}
+                    style={{ aspectRatio: "1", minWidth: 18, borderRadius: 3, background: o === 0 ? "var(--color-surface-2)" : `color-mix(in srgb, var(--color-brand) ${Math.round(a * 100)}%, transparent)` }} />
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+        <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)", marginTop: 10 }}>Intensidad = cantidad de ventas (horario AR). Pasá el cursor para ver el detalle.</div>
+      </div>
+    </div>
+  );
+}
+
+const STATUS_LABEL: Record<string, string> = { open: "Abiertas", closed: "Cerradas", cancelled: "Canceladas" };
+const STATUS_COLOR: Record<string, string> = { open: "var(--color-warning)", closed: "var(--color-success)", cancelled: "var(--color-danger)" };
+
+function FunnelSection({ funnel }: { funnel: FunnelData }) {
+  if (funnel.total === 0) return null;
+  return (
+    <div className="anim-up delay-3" style={{ marginTop: 28 }}>
+      <h2 style={H2}>Estados y cancelación</h2>
+      <div className="card" style={{ padding: "18px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 20, alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: "0.8125rem", color: "var(--color-muted)", marginBottom: 6 }}>Tasa de cancelación</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: "1.75rem", fontWeight: 700, color: funnel.cancelledPct > 15 ? "var(--color-danger)" : "var(--color-ink)", letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{funnel.cancelledPct}%</span>
+            <span style={{ fontSize: "0.8125rem", color: "var(--color-subtle)" }}>{num(funnel.cancelled)} de {num(funnel.total)} pedidos</span>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {funnel.byStatus.map((s) => {
+            const pct = funnel.total ? Math.round((s.count / funnel.total) * 100) : 0;
+            return (
+              <div key={s.status}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginBottom: 3 }}>
+                  <span style={{ color: "var(--color-ink)" }}>{STATUS_LABEL[s.status] ?? s.status}</span>
+                  <span style={{ color: "var(--color-muted)", fontVariantNumeric: "tabular-nums" }}>{num(s.count)} · {pct}%</span>
+                </div>
+                <div style={{ height: 7, borderRadius: 999, background: "var(--color-surface-2)", overflow: "hidden" }}>
+                  <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: STATUS_COLOR[s.status] ?? "var(--color-faint)" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CampaignEffectSection({ effects }: { effects: CampaignEffect[] }) {
+  if (effects.length === 0) return null;
+  const fmt = (iso: string) => new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
+  return (
+    <div className="anim-up delay-3" style={{ marginTop: 40 }}>
+      <h2 style={{ ...H2, marginBottom: 4 }}>Efectividad de campañas</h2>
+      <p style={{ fontSize: "0.8125rem", color: "var(--color-subtle)", margin: "0 0 16px" }}>
+        Facturación durante la campaña vs. una ventana de igual duración justo antes.
+      </p>
+      <div className="card" style={{ overflow: "hidden", padding: 0 }}>
+        {effects.map((e, i) => (
+          <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none", flexWrap: "wrap" }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {e.name} {e.active && <span className="pill pill-info" style={{ fontSize: "0.5625rem", marginLeft: 4, verticalAlign: "middle" }}>ACTIVA</span>}
+              </div>
+              <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>{fmt(e.from)} → {e.active ? "en curso" : fmt(e.to)}</div>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums" }}>{money(e.revenueDuring)}</div>
+              <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>durante · {num(e.ordersDuring)} ped.</div>
+            </div>
+            <div style={{ width: 92, textAlign: "right" }}>
+              {e.liftPct == null
+                ? <span style={{ fontSize: "0.75rem", color: "var(--color-faint)" }}>sin base</span>
+                : <span style={{ fontSize: "0.9375rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: e.liftPct > 0 ? "var(--color-success)" : e.liftPct < 0 ? "var(--color-danger)" : "var(--color-subtle)" }}>
+                    {e.liftPct > 0 ? "▲" : e.liftPct < 0 ? "▼" : "→"} {Math.abs(e.liftPct)}%
+                  </span>}
+              <div style={{ fontSize: "0.625rem", color: "var(--color-faint)" }}>vs. antes</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

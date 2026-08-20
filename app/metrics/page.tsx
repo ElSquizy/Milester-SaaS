@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { getMetrics, getProjection, getInsights, getBreakdowns, resolveRange } from "@/lib/metrics";
+import { getMetrics, getProjection, getInsights, getBreakdowns, getHeatmap, getFunnel, getCampaignEffectiveness, resolveRange } from "@/lib/metrics";
 import MetricsClient from "./MetricsClient";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +15,14 @@ export default async function MetricsPage({
 
   const sp = await searchParams;
   const range = resolveRange(sp.range, sp.from, sp.to);
-  const [data, projection, insights, breakdowns] = await Promise.all([
+  const [data, projection, insights, breakdowns, heatmap, funnel, campaignEffects] = await Promise.all([
     getMetrics(range),
     getProjection(),
     getInsights(),
     getBreakdowns(range),
+    getHeatmap(range),
+    getFunnel(range),
+    getCampaignEffectiveness(),
   ]);
 
   return (
@@ -36,6 +39,9 @@ export default async function MetricsPage({
       projection={projection}
       insights={insights}
       breakdowns={breakdowns}
+      heatmap={heatmap}
+      funnel={funnel}
+      campaignEffects={campaignEffects}
     />
   );
 }
