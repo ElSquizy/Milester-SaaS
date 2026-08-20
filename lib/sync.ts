@@ -27,6 +27,14 @@ export async function syncOneProduct(
   });
   if (!product) throw new Error("Producto no encontrado");
 
+  // Validación temprana: Tienda Nube rechaza un producto sin precio base válido,
+  // y un CREATE inválido puede colgar la request hasta el timeout de Vercel (que
+  // devuelve HTML en vez de JSON → "Unexpected token '<'" en el cliente). Cortamos
+  // acá con un mensaje claro en vez de mandar el request a TN.
+  if (!(product.price > 0)) {
+    throw new Error(`«${product.name}» necesita un precio base mayor a $0 para sincronizarse con Tienda Nube.`);
+  }
+
   // What this push is carrying, read before the bookkeeping marks it synced.
   const pendingChanges = await prisma.changelog.findMany({
     where: { productId, synced: false },
