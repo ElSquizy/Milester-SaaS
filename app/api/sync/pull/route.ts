@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { pullFromTiendaNube } from "@/lib/pullSync";
 
+// El pull hace catálogo + ventas + campañas + recompute: puede pasar los ~10s del
+// default de Vercel y devolver un HTML de error (500). Igual que /api/sync.
+export const maxDuration = 60;
+
 // Auto-pull (fired on navigation) is throttled; the explicit button sends force.
 const THROTTLE_MS = 45_000;
 

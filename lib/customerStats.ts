@@ -15,24 +15,30 @@ export async function recomputeCustomerStats(customerIds: number | null | undefi
   )];
   if (ids.length === 0) return;
 
-  const agg = await prisma.order.groupBy({
-    by: ["customerId"],
-    where: { customerId: { in: ids }, status: { not: "cancelled" } },
-    _sum: { total: true },
-    _count: true,
-    _max: { orderedAt: true },
-  });
+  const [agg, current] = await Promise.all([
+    prisma.order.groupBy({
+      by: ["customerId"],
+      where: { customerId: { in: ids }, status: { not: "cancelled" } },
+      _sum: { total: true },
+      _count: true,
+      _max: { orderedAt: true },
+    }),
+    prisma.customer.findMany({ where: { id: { in: ids } }, select: { id: true, totalSpent: true, orderCount: true, lastOrderAt: true } }),
+  ]);
   const byId = new Map(agg.map((r) => [r.customerId, r]));
+  const curById = new Map(current.map((c) => [c.id, c]));
 
+  // Escrituras secuenciales (Turso HTTP no soporta $transaction en loops largos), pero
+  // solo escribimos los que cambiaron: en un sync típico casi nada cambia, así que esto
+  // evita cientos de updates que hacían el pull lento (y lo mataban por timeout en Vercel).
   for (const id of ids) {
     const r = byId.get(id);
-    await prisma.customer.update({
-      where: { id },
-      data: {
-        totalSpent: Math.round((r?._sum.total ?? 0) * 100) / 100,
-        orderCount: r?._count ?? 0,
-        lastOrderAt: r?._max.orderedAt ?? null,
-      },
-    });
+    const totalSpent = Math.round((r?._sum.total ?? 0) * 100) / 100;
+    const orderCount = r?._count ?? 0;
+    const lastOrderAt = r?._max.orderedAt ?? null;
+    const cur = curById.get(id);
+    const sameLast = (cur?.lastOrderAt?.getTime() ?? null) === (lastOrderAt?.getTime() ?? null);
+    if (cur && cur.totalSpent === totalSpent && cur.orderCount === orderCount && sameLast) continue;
+    await prisma.customer.update({ where: { id }, data: { totalSpent, orderCount, lastOrderAt } });
   }
 }
