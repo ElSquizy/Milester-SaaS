@@ -1,5 +1,18 @@
-import sharp, { type OverlayOptions } from "sharp";
+// `sharp` es un módulo NATIVO. Lo importamos SOLO como tipo arriba (se borra en
+// compilación) y lo cargamos de forma perezosa dentro de las funciones. Así, los
+// módulos que solo importan estas funciones (productImage → sync → campaignScheduler
+// → pullSync, y por ende /api/sync y /api/sync/pull) NO cargan el binario nativo al
+// evaluarse — que es lo que reventaba con 500 en Vercel/Lambda. sharp solo se carga
+// cuando realmente se compone una imagen.
+import type { OverlayOptions } from "sharp";
 import { LAYOUT, DEFAULT_PRODUCT_SLOT, type ProductSlot } from "./imageTemplates";
+
+type SharpFactory = (typeof import("sharp"))["default"];
+let _sharp: SharpFactory | null = null;
+async function getSharp(): Promise<SharpFactory> {
+  if (!_sharp) _sharp = (await import("sharp")).default;
+  return _sharp;
+}
 
 const CANVAS = LAYOUT.canvas; // 1024
 const T = { r: 0, g: 0, b: 0, alpha: 0 }; // transparent
@@ -22,6 +35,7 @@ async function fetchBuffer(url: string): Promise<Buffer> {
  */
 async function buildShadow(cover: { buf: Buffer } | null, product: { buf: Buffer } | null, s: ShadowConfig, slot: ProductSlot): Promise<Buffer | null> {
   if (s.opacity <= 0) return null;
+  const sharp = await getSharp();
   const parts: OverlayOptions[] = [];
   if (cover) parts.push({ input: cover.buf, left: Math.round(LAYOUT.cover.x) + s.offsetX, top: Math.round(LAYOUT.cover.y) + s.offsetY });
   if (product) parts.push({ input: product.buf, left: Math.round(slot.x) + s.offsetX, top: Math.round(slot.y) + s.offsetY });
@@ -57,6 +71,7 @@ export type ComposeInput = {
 async function cropProductSides(buf: Buffer, cropSides: number): Promise<Buffer> {
   const frac = Math.min(0.45, Math.max(0, cropSides));
   if (frac <= 0) return buf;
+  const sharp = await getSharp();
   const meta = await sharp(buf).metadata();
   const w = meta.width ?? 0, h = meta.height ?? 0;
   if (!w || !h) return buf;
@@ -74,6 +89,7 @@ async function cropProductSides(buf: Buffer, cropSides: number): Promise<Buffer>
  *   4. cover (670×763 frame, centered)
  */
 export async function composeProductImage(input: ComposeInput): Promise<Buffer> {
+  const sharp = await getSharp();
   const composites: OverlayOptions[] = [];
 
   if (input.backgroundUrl) {
