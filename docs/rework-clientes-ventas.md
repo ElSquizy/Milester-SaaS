@@ -1,6 +1,7 @@
 # Plan — Analítica + Rework de Clientes y Ventas
 
-Estado: aprobado (plan), sin implementar. Orden recomendado abajo.
+**Estado: COMPLETADO (2026-08-20).** Todas las fases (0–4) implementadas, verificadas
+y en `main`. Detalle de commits al final.
 
 ## Contexto
 
@@ -29,7 +30,7 @@ Por eso el habilitador del rework de Clientes es **denormalizar stats en `Custom
 
 ---
 
-## Fase 0 — Cimiento de datos (va PRIMERO)
+## Fase 0 — Cimiento de datos ✅ (va PRIMERO)
 
 - Denormalizar en `Customer`: `lastOrderAt`, `orderCount`, `totalSpent`
   (migración aditiva a Turso, patrón `Product.unitsSold/lastSoldAt`).
@@ -37,14 +38,14 @@ Por eso el habilitador del rework de Clientes es **denormalizar stats en `Custom
   canceladas de forma consistente.
 - Backfill una vez con script sobre pedidos existentes.
 
-## Fase 1 — Rework de Ventas (bajo riesgo, win rápido)
+## Fase 1 — Rework de Ventas ✅ (bajo riesgo, win rápido)
 
 - Franja resumen del filtro actual (facturado, ticket promedio, nº ventas) vía `aggregate`.
 - Filtro por rango de fechas (reusar `resolveRange` de `lib/metrics`).
 - Filtros por origen (web/local) y estado (ya existe). Medio de pago opcional (caveat etiquetas).
 - Mantener operacional (lista + panel lateral). No duplicar `/metrics`.
 
-## Fase 2 — Rework de Clientes (mayor valor; usa Fase 0)
+## Fase 2 — Rework de Clientes ✅ (mayor valor; usa Fase 0)
 
 - Orden server-side + paginación por LTV, última compra, frecuencia.
 - Segmentos (RFM simplificado): Nuevo · Recurrente · VIP · Dormido/En riesgo,
@@ -53,13 +54,13 @@ Por eso el habilitador del rework de Clientes es **denormalizar stats en `Custom
   (nunca envío automático).
 - Conservar detección de duplicados y detalle expandible actuales.
 
-## Fase 3 — Analítica Tier 1 en `/metrics`
+## Fase 3 — Analítica Tier 1 en `/metrics` ✅
 
 - Clientes/retención: nuevos vs. recurrentes, curva de recompra (aprovecha Fase 0).
 - Ventas por plataforma/tipo (`variantName`).
 - Ventas por colección/categoría.
 
-## Fase 4 — Tier 2 (después)
+## Fase 4 — Tier 2 ✅
 
 - Heatmap día×hora · efectividad de campañas · embudo/cancelaciones.
 
@@ -73,3 +74,29 @@ Por eso el habilitador del rework de Clientes es **denormalizar stats en `Custom
 
 Fase 0 → Fase 1 (Ventas) → Fase 2 (Clientes) → Fase 3 (analítica).
 Cada fase es enviable y verificable por separado.
+
+---
+
+## Estado de implementación (2026-08-20)
+
+Todas las fases completas, verificadas contra datos reales y en `main`.
+
+| Fase | Qué quedó | Commit |
+|---|---|---|
+| 0 | `Customer.totalSpent/orderCount/lastOrderAt` + recompute en sync/tickets + backfill (1.023) | `2631c6e` |
+| 1 | Ventas: franja resumen + filtros fecha/origen | `38ff687` |
+| 2 | Clientes: segmentos RFM, orden LTV/recencia, reactivación (Dormido + WhatsApp) | `61ced24` |
+| — | Umbrales de segmento editables (`Settings.segmentConfig` + `/api/customer-segments`) | `837ab62` |
+| 3 | /metrics: retención, plataforma/tipo, colección | `1bb0c7b` |
+| 4 | /metrics: heatmap día×hora, embudo/cancelación, efectividad de campañas | `2645fce` |
+
+### Notas / deuda conocida
+- **Márgenes reales**: siguen bloqueados (costUsd 8/1819, exchangeRate 1/1596). Para
+  habilitarlos hay que empezar a snapshotear `costUsd` + `exchangeRate` en cada venta
+  (solo sirve hacia adelante).
+- **"Por tipo"** (primaria/secundaria) tiene "Otro" dominante: el tag solo está en el
+  nombre de algunos productos. Es fiel al dato.
+- **"Por colección"** usa `categoryName` (colección principal), no la relación completa
+  `ProductCategory`. Un desglose por todas las colecciones es un query más pesado.
+- **Medio de pago**: filtro no implementado por etiquetas sucias (45% "not-provided",
+  "Transferencia" duplicada). Requiere normalización previa.
