@@ -418,8 +418,25 @@ model Employee {
   color     String   @default("#2563EB")
   active    Boolean  @default(true)
   tasks     Task[]
+  shifts    Shift[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// Turno de un empleado en una fecha puntual (Etapa 3: horarios "por fecha").
+model Shift {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime // día del turno (UTC medianoche, como CalendarEvent)
+  start      String   // "HH:MM"
+  end        String   // "HH:MM"
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date])
+  @@index([employeeId])
 }
 
 model Task {

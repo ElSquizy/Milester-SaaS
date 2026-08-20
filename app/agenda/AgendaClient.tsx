@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import CalendarView from "./CalendarView";
+import HorariosView from "./HorariosView";
 
 type Employee = { id: number; name: string; role: string | null; color: string; active: boolean; openTasks: number };
 type Assignee = { id: number; name: string; color: string } | null;
@@ -40,7 +41,7 @@ export default function AgendaClient() {
   const [q, setQ] = useState("");
   const [taskModal, setTaskModal] = useState<null | Task | "new">(null);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [tab, setTab] = useState<"tareas" | "calendario">("tareas");
+  const [tab, setTab] = useState<"tareas" | "calendario" | "horarios">("tareas");
   const [calKey, setCalKey] = useState(0);
 
   async function loadAll() {
@@ -87,9 +88,9 @@ export default function AgendaClient() {
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {/* Pestañas de la sección */}
             <div style={{ display: "flex", gap: 3, background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: 3 }}>
-              {(["tareas", "calendario"] as const).map((tb) => (
+              {([["tareas", "Tareas"], ["calendario", "Calendario"], ["horarios", "Horarios"]] as const).map(([tb, label]) => (
                 <button key={tb} onClick={() => setTab(tb)} style={{ padding: "6px 14px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: tab === tb ? 600 : 500, background: tab === tb ? "var(--color-surface)" : "transparent", color: tab === tb ? "var(--color-brand)" : "var(--color-subtle)", boxShadow: tab === tb ? "var(--shadow-card)" : "none" }}>
-                  {tb === "tareas" ? "Tareas" : "Calendario"}
+                  {label}
                 </button>
               ))}
             </div>
@@ -138,7 +139,9 @@ export default function AgendaClient() {
 
       {/* Body */}
       <div style={{ flex: 1, overflow: "auto", padding: "20px 32px 60px" }}>
-        {tab === "calendario" ? (
+        {tab === "horarios" ? (
+          <HorariosView employees={employees.filter((e) => e.active)} />
+        ) : tab === "calendario" ? (
           <CalendarView refreshKey={calKey} onEditTask={(t) => setTaskModal(t as Task)} />
         ) : loading ? (
           <div style={{ padding: 60, textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Cargando…</div>
