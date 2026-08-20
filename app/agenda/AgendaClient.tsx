@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
+import CalendarView from "./CalendarView";
 
 type Employee = { id: number; name: string; role: string | null; color: string; active: boolean; openTasks: number };
 type Assignee = { id: number; name: string; color: string } | null;
@@ -39,6 +40,8 @@ export default function AgendaClient() {
   const [q, setQ] = useState("");
   const [taskModal, setTaskModal] = useState<null | Task | "new">(null);
   const [teamOpen, setTeamOpen] = useState(false);
+  const [tab, setTab] = useState<"tareas" | "calendario">("tareas");
+  const [calKey, setCalKey] = useState(0);
 
   async function loadAll() {
     const [emps, tks] = await Promise.all([
@@ -82,18 +85,31 @@ export default function AgendaClient() {
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {/* Pestañas de la sección */}
             <div style={{ display: "flex", gap: 3, background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: 3 }}>
-              {(["list", "board"] as const).map((v) => (
-                <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: view === v ? 600 : 500, background: view === v ? "var(--color-surface)" : "transparent", color: view === v ? "var(--color-ink)" : "var(--color-subtle)", boxShadow: view === v ? "var(--shadow-card)" : "none" }}>
-                  {v === "list" ? "Lista" : "Tablero"}
+              {(["tareas", "calendario"] as const).map((tb) => (
+                <button key={tb} onClick={() => setTab(tb)} style={{ padding: "6px 14px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: tab === tb ? 600 : 500, background: tab === tb ? "var(--color-surface)" : "transparent", color: tab === tb ? "var(--color-brand)" : "var(--color-subtle)", boxShadow: tab === tb ? "var(--shadow-card)" : "none" }}>
+                  {tb === "tareas" ? "Tareas" : "Calendario"}
                 </button>
               ))}
             </div>
-            <button className="btn-primary" onClick={() => setTaskModal("new")} style={{ padding: "8px 14px" }}>+ Nueva tarea</button>
+            {tab === "tareas" && (
+              <>
+                <div style={{ display: "flex", gap: 3, background: "var(--color-surface-2)", borderRadius: "var(--radius-control)", padding: 3 }}>
+                  {(["list", "board"] as const).map((v) => (
+                    <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", borderRadius: 9, border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: view === v ? 600 : 500, background: view === v ? "var(--color-surface)" : "transparent", color: view === v ? "var(--color-ink)" : "var(--color-subtle)", boxShadow: view === v ? "var(--shadow-card)" : "none" }}>
+                      {v === "list" ? "Lista" : "Tablero"}
+                    </button>
+                  ))}
+                </div>
+                <button className="btn-primary" onClick={() => setTaskModal("new")} style={{ padding: "8px 14px" }}>+ Nueva tarea</button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Equipo (chips-filtro) */}
+        {/* Equipo (chips-filtro) — solo en Tareas */}
+        {tab === "tareas" && (
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={() => setFAssignee("")} style={chip(fAssignee === "", null)}>Todas</button>
           {employees.filter((e) => e.active).map((e) => (
@@ -117,11 +133,14 @@ export default function AgendaClient() {
             </>
           )}
         </div>
+        )}
       </div>
 
       {/* Body */}
       <div style={{ flex: 1, overflow: "auto", padding: "20px 32px 60px" }}>
-        {loading ? (
+        {tab === "calendario" ? (
+          <CalendarView refreshKey={calKey} onEditTask={(t) => setTaskModal(t as Task)} />
+        ) : loading ? (
           <div style={{ padding: 60, textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Cargando…</div>
         ) : tasks.length === 0 ? (
           <EmptyState onNew={() => setTaskModal("new")} hasTeam={employees.length > 0} onTeam={() => setTeamOpen(true)} />
@@ -137,7 +156,7 @@ export default function AgendaClient() {
           task={taskModal === "new" ? null : taskModal}
           employees={employees.filter((e) => e.active)}
           onClose={() => setTaskModal(null)}
-          onSaved={() => { setTaskModal(null); reloadTasks(); loadEmployeesCount(); }}
+          onSaved={() => { setTaskModal(null); reloadTasks(); loadEmployeesCount(); setCalKey((k) => k + 1); }}
         />
       )}
       {teamOpen && <TeamModal employees={employees} onClose={() => setTeamOpen(false)} onChanged={loadAll} />}

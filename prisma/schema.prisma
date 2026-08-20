@@ -437,3 +437,17 @@ model Task {
   @@index([assigneeId])
   @@index([status])
 }
+
+// Eventos manuales del calendario (Etapa 2): lanzamientos, notas. Las campañas y
+// feriados NO se guardan acá — se derivan (Campaign.endDate/startDate y lib/holidays).
+model CalendarEvent {
+  id        Int      @id @default(autoincrement())
+  title     String
+  date      DateTime
+  type      String   @default("note") // launch | note
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([date])
+}
