@@ -353,3 +353,81 @@ export async function getInsights(): Promise<Insights> {
 
   return { promoCandidates, risers, fallers, weekdays, bestWeekday: bestWeekday && bestWeekday.revenue > 0 ? bestWeekday : null };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fase 3 — Analítica Tier 1: retención, plataforma/tipo, colección
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type RetentionData = { newCustomers: number; returningCustomers: number };
+export type BucketRow = { key: string; revenue: number; units: number };
+export type Breakdowns = {
+  retention: RetentionData;
+  platforms: BucketRow[];   // PS5 / PS4 / Otro (de variantName)
+  types: BucketRow[];       // Primaria / Secundaria / Otro (del nombre del ítem)
+  categories: BucketRow[];  // top colecciones por facturación (categoryName)
+};
+
+/**
+ * Cortes de la analítica Tier 1 para el rango seleccionado. Todo agregado en el
+ * servidor y respetando el filtro de fechas de /metrics. Retención se calcula de
+ * los pedidos (un cliente es "nuevo" si no tuvo pedidos antes del rango).
+ */
+export async function getBreakdowns(range: ResolvedRange): Promise<Breakdowns> {
+  const fromIso = range.from.toISOString();
+  const toIso = range.to.toISOString();
+
+  const inRange = Prisma.sql`o.status <> 'cancelled' AND o.customerId IS NOT NULL
+    AND datetime(o.orderedAt) >= datetime(${fromIso}) AND datetime(o.orderedAt) < datetime(${toIso})`;
+
+  const [totalRow, returningRow, platformRaw, typeRaw, categoryRaw] = await Promise.all([
+    prisma.$queryRaw<Array<{ n: number | bigint }>>(Prisma.sql`
+      SELECT COUNT(DISTINCT o.customerId) AS n FROM "Order" o WHERE ${inRange}`),
+    prisma.$queryRaw<Array<{ n: number | bigint }>>(Prisma.sql`
+      SELECT COUNT(DISTINCT o.customerId) AS n FROM "Order" o
+      WHERE ${inRange}
+        AND EXISTS (SELECT 1 FROM "Order" o2 WHERE o2.customerId = o.customerId
+                    AND o2.status <> 'cancelled' AND datetime(o2.orderedAt) < datetime(${fromIso}))`),
+    prisma.$queryRaw<Array<{ k: string; revenue: number; units: number | bigint }>>(Prisma.sql`
+      SELECT CASE
+               WHEN oi.variantName LIKE '%PlayStation 5%' OR oi.variantName LIKE '%PS5%' THEN 'PS5'
+               WHEN oi.variantName LIKE '%PlayStation 4%' OR oi.variantName LIKE '%PS4%' THEN 'PS4'
+               ELSE 'Otro' END AS k,
+             CAST(COALESCE(SUM(oi.price * oi.quantity), 0) AS REAL) AS revenue,
+             CAST(COALESCE(SUM(oi.quantity), 0) AS INTEGER) AS units
+      FROM "OrderItem" oi JOIN "Order" o ON o.id = oi.orderId
+      WHERE o.status <> 'cancelled'
+        AND datetime(o.orderedAt) >= datetime(${fromIso}) AND datetime(o.orderedAt) < datetime(${toIso})
+      GROUP BY k ORDER BY revenue DESC`),
+    prisma.$queryRaw<Array<{ k: string; revenue: number; units: number | bigint }>>(Prisma.sql`
+      SELECT CASE
+               WHEN oi.name LIKE '%SECUNDARIA%' THEN 'Secundaria'
+               WHEN oi.name LIKE '%PRIMARIA%' THEN 'Primaria'
+               ELSE 'Otro' END AS k,
+             CAST(COALESCE(SUM(oi.price * oi.quantity), 0) AS REAL) AS revenue,
+             CAST(COALESCE(SUM(oi.quantity), 0) AS INTEGER) AS units
+      FROM "OrderItem" oi JOIN "Order" o ON o.id = oi.orderId
+      WHERE o.status <> 'cancelled'
+        AND datetime(o.orderedAt) >= datetime(${fromIso}) AND datetime(o.orderedAt) < datetime(${toIso})
+      GROUP BY k ORDER BY revenue DESC`),
+    prisma.$queryRaw<Array<{ k: string; revenue: number; units: number | bigint }>>(Prisma.sql`
+      SELECT p.categoryName AS k,
+             CAST(COALESCE(SUM(oi.price * oi.quantity), 0) AS REAL) AS revenue,
+             CAST(COALESCE(SUM(oi.quantity), 0) AS INTEGER) AS units
+      FROM "OrderItem" oi JOIN "Product" p ON p.id = oi.productId JOIN "Order" o ON o.id = oi.orderId
+      WHERE o.status <> 'cancelled' AND p.categoryName IS NOT NULL
+        AND datetime(o.orderedAt) >= datetime(${fromIso}) AND datetime(o.orderedAt) < datetime(${toIso})
+      GROUP BY p.categoryName ORDER BY revenue DESC LIMIT 8`),
+  ]);
+
+  const totalCust = Number(totalRow[0]?.n ?? 0);
+  const returning = Number(returningRow[0]?.n ?? 0);
+  const map = (rows: Array<{ k: string; revenue: number; units: number | bigint }>): BucketRow[] =>
+    rows.map((r) => ({ key: r.k, revenue: r.revenue, units: Number(r.units) }));
+
+  return {
+    retention: { newCustomers: Math.max(0, totalCust - returning), returningCustomers: returning },
+    platforms: map(platformRaw),
+    types: map(typeRaw),
+    categories: map(categoryRaw),
+  };
+}

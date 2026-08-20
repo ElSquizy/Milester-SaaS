@@ -6,7 +6,7 @@ import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
-import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals, type Projection, type Insights } from "@/lib/metrics";
+import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals, type Projection, type Insights, type Breakdowns, type BucketRow } from "@/lib/metrics";
 
 // Paleta para el desglose por canal — el resto del sistema es mono-brand.
 const BRAND = "var(--color-brand)";
@@ -43,11 +43,11 @@ function delta(cur: number, prev: number): number | null {
 const H2: React.CSSProperties = { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "0 0 12px" };
 
 export default function MetricsClient({
-  preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource, projection, insights,
+  preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource, projection, insights, breakdowns,
 }: {
   preset: Preset; fromDay: string; toDay: string; granularity: Granularity;
   current: Totals; previous: Totals; series: SeriesPoint[]; topProducts: TopProduct[]; bySource: SourceSlice[];
-  projection: Projection; insights: Insights;
+  projection: Projection; insights: Insights; breakdowns: Breakdowns;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -261,6 +261,9 @@ export default function MetricsClient({
                 </div>
               </div>
             </div>
+
+            {/* Retención + plataforma/tipo/colección (Fase 3) */}
+            <BreakdownsSection breakdowns={breakdowns} />
           </>
         )}
 
@@ -307,6 +310,88 @@ function ProjectionCard({ p }: { p: Projection }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const PLAT_COLOR: Record<string, string> = { PS5: "#2563EB", PS4: "#8B5CF6", Otro: "var(--color-faint)" };
+
+function BreakdownsSection({ breakdowns }: { breakdowns: Breakdowns }) {
+  const { retention, platforms, types, categories } = breakdowns;
+  const totalCust = retention.newCustomers + retention.returningCustomers;
+  const retPct = totalCust ? Math.round((retention.returningCustomers / totalCust) * 100) : 0;
+
+  return (
+    <div className="anim-up delay-3" style={{ marginTop: 40 }}>
+      <h2 style={H2}>Clientes y catálogo</h2>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18 }}>
+        {/* Retención: nuevos vs recurrentes */}
+        <div className="card" style={{ padding: "18px 20px" }}>
+          <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-ink)", marginBottom: 3 }}>Nuevos vs. recurrentes</div>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginBottom: 14 }}>Clientes que compraron en el período.</div>
+          {totalCust === 0 ? <div style={{ fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Sin clientes en el período.</div> : (
+            <>
+              <div style={{ display: "flex", height: 10, borderRadius: 999, overflow: "hidden", marginBottom: 12 }}>
+                <div style={{ width: `${100 - retPct}%`, background: "var(--color-info)" }} />
+                <div style={{ width: `${retPct}%`, background: "var(--color-success)" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <Legend color="var(--color-info)" label="Nuevos" value={num(retention.newCustomers)} />
+                <Legend color="var(--color-success)" label={`Recurrentes · ${retPct}%`} value={num(retention.returningCustomers)} right />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Plataforma */}
+        <BreakdownBars title="Por plataforma" hint="Facturación por consola (PS5 / PS4)." rows={platforms} colorOf={(k) => PLAT_COLOR[k] ?? "var(--color-brand)"} />
+
+        {/* Tipo de cuenta */}
+        <BreakdownBars title="Por tipo" hint="Primaria vs. secundaria (según el nombre del producto)." rows={types} colorOf={(k) => (k === "Secundaria" ? "#8B5CF6" : k === "Primaria" ? "#2563EB" : "var(--color-faint)")} />
+
+        {/* Colección */}
+        <BreakdownBars title="Por colección" hint="Top colecciones por facturación (colección principal del producto)." rows={categories} colorOf={() => "var(--color-brand)"} />
+      </div>
+    </div>
+  );
+}
+
+function Legend({ color, label, value, right }: { color: string; label: string; value: string; right?: boolean }) {
+  return (
+    <div style={{ textAlign: right ? "right" : "left" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: right ? "flex-end" : "flex-start" }}>
+        <span style={{ width: 9, height: 9, borderRadius: 3, background: color }} />
+        <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>{label}</span>
+      </div>
+      <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{value}</div>
+    </div>
+  );
+}
+
+function BreakdownBars({ title, hint, rows, colorOf }: { title: string; hint: string; rows: BucketRow[]; colorOf: (k: string) => string }) {
+  const max = Math.max(1, ...rows.map((r) => r.revenue));
+  return (
+    <div className="card" style={{ padding: "18px 20px" }}>
+      <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-ink)", marginBottom: 3 }}>{title}</div>
+      <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginBottom: 14, lineHeight: 1.4 }}>{hint}</div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Sin datos en el período.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+          {rows.map((r) => (
+            <div key={r.key}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 3 }}>
+                <span style={{ fontSize: "0.8125rem", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.key}</span>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{money(r.revenue)} · {num(r.units)}u</span>
+              </div>
+              <div style={{ height: 7, borderRadius: 999, background: "var(--color-surface-2)", overflow: "hidden" }}>
+                <div style={{ width: `${Math.round((r.revenue / max) * 100)}%`, height: "100%", borderRadius: 999, background: colorOf(r.key) }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
