@@ -3,8 +3,25 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import Countdown from "./Countdown";
 import OrderTickets from "./OrderTickets";
+import { getCalendarEvents, getTodayShifts } from "@/lib/agenda";
 
 export const dynamic = "force-dynamic";
+
+const EVENT_STYLE: Record<string, { color: string; label: string }> = {
+  task: { color: "var(--color-success)", label: "Tarea" },
+  "campaign-end": { color: "#EA580C", label: "Fin de oferta" },
+  "campaign-start": { color: "var(--color-brand)", label: "Campaña" },
+  launch: { color: "#8B5CF6", label: "Lanzamiento" },
+  note: { color: "var(--color-subtle)", label: "Nota" },
+  holiday: { color: "var(--color-danger)", label: "Feriado" },
+};
+function eventDateLabel(day: string, todayAr: string): string {
+  const tomorrow = new Date(`${todayAr}T12:00:00`); tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  if (day === todayAr) return "Hoy";
+  if (day === tomorrowStr) return "Mañana";
+  return new Date(`${day}T12:00:00`).toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" });
+}
 
 const widgetH2: React.CSSProperties = { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: 0 };
 const widgetLink: React.CSSProperties = { fontSize: "0.8125rem", color: "var(--color-brand)", textDecoration: "none", fontWeight: 600 };
@@ -57,6 +74,15 @@ export default async function HomePage() {
   const total = n("total"), modified = n("modified"), errors = n("errors"),
     noImage = n("noImage"), noCategory = n("noCategory"), noStock = n("noStock"), stale = n("stale");
   const hasSales = ordersCount > 0;
+
+  // Agenda para el Inicio (solo lectura): quién trabaja hoy + próximos eventos (30 días).
+  const todayAr = new Date(now.getTime() - 3 * 3600e3).toISOString().slice(0, 10);
+  const in30Ar = new Date(now.getTime() - 3 * 3600e3 + 30 * 86400e3).toISOString().slice(0, 10);
+  const [todayShifts, calEvents] = await Promise.all([getTodayShifts(), getCalendarEvents(todayAr, in30Ar)]);
+  const upcomingEvents = calEvents
+    .filter((e) => e.day >= todayAr)
+    .sort((a, b) => a.day.localeCompare(b.day) || a.title.localeCompare(b.title))
+    .slice(0, 7);
 
   // KPIs: mes en curso vs mes anterior.
   const revNow = mtd._sum.total ?? 0, revPrev = lastMonthAgg._sum.total ?? 0;
@@ -253,6 +279,56 @@ export default async function HomePage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Agenda (solo lectura): quién trabaja hoy + próximos eventos */}
+        <div className="anim-up delay-2" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 18, marginBottom: 40 }}>
+          {/* Hoy en la tienda */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <h2 style={widgetH2}>Hoy en la tienda</h2>
+              <Link href="/agenda" style={widgetLink}>Horarios →</Link>
+            </div>
+            <div className="card-float" style={{ overflow: "hidden", minHeight: 96 }}>
+              {todayShifts.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Nadie tiene turno hoy.</div>
+              ) : todayShifts.map((s, i) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "12px 16px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
+                  <span style={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, background: s.employee.color }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.employee.name}</div>
+                    {s.note && <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>{s.note}</div>}
+                  </div>
+                  <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{s.start}–{s.end}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Próximos eventos */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <h2 style={widgetH2}>Próximos eventos</h2>
+              <Link href="/agenda" style={widgetLink}>Calendario →</Link>
+            </div>
+            <div className="card-float" style={{ overflow: "hidden", minHeight: 96 }}>
+              {upcomingEvents.length === 0 ? (
+                <div style={{ padding: "28px 18px", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>No hay eventos en los próximos 30 días.</div>
+              ) : upcomingEvents.map((e, i) => {
+                const st = EVENT_STYLE[e.type] ?? EVENT_STYLE.note;
+                return (
+                  <div key={`${e.type}-${e.day}-${i}`} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 16px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: st.color }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
+                      <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 1 }}>{st.label}</div>
+                    </div>
+                    <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", flexShrink: 0, whiteSpace: "nowrap", textTransform: "capitalize" }}>{eventDateLabel(e.day, todayAr)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Widgets: campaigns + recent activity */}
