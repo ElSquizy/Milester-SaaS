@@ -6,6 +6,7 @@ import { es } from "date-fns/locale";
 type Emp = { id: number; name: string; color: string };
 type Shift = { id: number; employeeId: number; start: string; end: string; note: string | null; day: string; employee: { id: number; name: string; color: string } };
 type HeatCell = { weekday: number; hour: number; orders: number; revenue: number };
+type Seg = { key: string; shift: Shift; startM: number; endM: number; tail: boolean };
 
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -48,12 +49,24 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
     if (activeEmp == null || !employees.some((e) => e.id === activeEmp)) setActiveEmp(employees[0]?.id ?? null);
   }, [employees, activeEmp]);
 
-  // Turnos por día (índice 0..6 = Lun..Dom).
-  const byDay = useMemo(() => {
-    const m = new Map<string, Shift[]>();
-    for (const s of shifts) { const a = m.get(s.day) || []; a.push(s); m.set(s.day, a); }
+  // Segmentos de turno por columna-día. Un turno que cruza la medianoche se
+  // parte en dos: hasta las 24:00 en su día, y desde las 00:00 arriba en el día
+  // siguiente (así no se "cae" por debajo de la grilla).
+  const segmentsByDay = useMemo(() => {
+    const m = new Map<number, Seg[]>();
+    const push = (idx: number, seg: Seg) => { if (idx < 0 || idx > 6) return; const a = m.get(idx) || []; a.push(seg); m.set(idx, a); };
+    const idxOf = new Map(days.map((d, i) => [ymd(d), i]));
+    for (const s of shifts) {
+      const idx = idxOf.get(s.day);
+      if (idx === undefined) continue;
+      const startM = toMin(s.start), endRaw = toMin(s.end);
+      if (endRaw > startM) { push(idx, { key: `${s.id}`, shift: s, startM, endM: endRaw, tail: false }); continue; }
+      // Cruza medianoche: parte principal hasta 24:00 + cola en el día siguiente.
+      push(idx, { key: `${s.id}a`, shift: s, startM, endM: 1440, tail: false });
+      if (endRaw > 0) push(idx + 1, { key: `${s.id}b`, shift: s, startM: 0, endM: endRaw, tail: true });
+    }
     return m;
-  }, [shifts]);
+  }, [shifts, days]);
 
   // Horas semanales por empleado.
   const weeklyMin = useMemo(() => {
@@ -168,10 +181,10 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
               ))}
             </div>
             {/* Columnas por día */}
-            {days.map((d) => {
+            {days.map((d, dayIdx) => {
               const wd = d.getDay(); // 0=domingo … coincide con %w del heatmap
-              const dayShifts = (byDay.get(ymd(d)) || []).slice().sort((a, b) => toMin(a.start) - toMin(b.start));
-              const lanes = assignLanes(dayShifts);
+              const segs = (segmentsByDay.get(dayIdx) || []).slice().sort((a, b) => a.startM - b.startM);
+              const lanes = assignLanes(segs);
               return (
                 <div key={ymd(d)} style={{ position: "relative", borderLeft: "1px solid var(--color-divider)", background: isToday(d) ? "color-mix(in srgb, var(--color-brand) 3%, transparent)" : "transparent" }}>
                   {/* Celdas-hora (fondo heat + click para crear) */}
@@ -184,22 +197,22 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
                         style={{ height: ROW_H, borderTop: "1px solid var(--color-divider)", cursor: activeEmp ? "pointer" : "default", background: alpha > 0 ? `rgba(234,88,12,${alpha})` : "transparent" }} />
                     );
                   })}
-                  {/* Bloques de turno */}
-                  {dayShifts.map((s) => {
-                    const startM = toMin(s.start);
-                    const dur = durMin(s.start, s.end);
-                    const top = (startM / 60) * ROW_H;
-                    const height = Math.max(16, (dur / 60) * ROW_H - 2);
-                    const lane = lanes.laneOf.get(s.id) || 0;
+                  {/* Bloques de turno (segmentos: la cola de un turno nocturno cae en este día) */}
+                  {segs.map((seg) => {
+                    const s = seg.shift;
+                    const top = (seg.startM / 60) * ROW_H;
+                    const height = Math.max(16, ((seg.endM - seg.startM) / 60) * ROW_H - 2);
+                    const lane = lanes.laneOf.get(seg.key) || 0;
                     const width = `calc((100% - 4px) / ${lanes.count})`;
                     return (
-                      <button key={s.id} onClick={(ev) => { ev.stopPropagation(); setModal({ shift: s }); }}
+                      <button key={seg.key} onClick={(ev) => { ev.stopPropagation(); setModal({ shift: s }); }}
                         title={`${s.employee.name} · ${s.start}–${s.end}${s.note ? ` · ${s.note}` : ""}`}
                         style={{ position: "absolute", top, left: `calc(2px + ${lane} * ${width})`, width, height, overflow: "hidden",
-                          border: `1px solid color-mix(in srgb, ${s.employee.color} 55%, transparent)`, borderLeft: `3px solid ${s.employee.color}`, borderRadius: 6,
+                          border: `1px solid color-mix(in srgb, ${s.employee.color} 55%, transparent)`, borderLeft: `3px solid ${s.employee.color}`,
+                          borderRadius: 6, borderTopLeftRadius: seg.tail ? 0 : 6, borderTopRightRadius: seg.tail ? 0 : 6,
                           background: `color-mix(in srgb, ${s.employee.color} 20%, var(--color-surface))`, color: "var(--color-ink)",
                           padding: "2px 5px", cursor: "pointer", textAlign: "left", fontSize: "0.6875rem", lineHeight: 1.2 }}>
-                        <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.employee.name}</div>
+                        <div style={{ fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{seg.tail ? "↳ " : ""}{s.employee.name}</div>
                         <div style={{ color: "var(--color-muted)", fontVariantNumeric: "tabular-nums" }}>{s.start}–{s.end}</div>
                       </button>
                     );
@@ -221,15 +234,14 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
   );
 }
 
-/** Asigna "carriles" a los turnos que se solapan en un mismo día (para mostrarlos lado a lado). */
-function assignLanes(dayShifts: Shift[]): { laneOf: Map<number, number>; count: number } {
-  const laneOf = new Map<number, number>();
-  const laneEnds: number[] = []; // fin (min) del último turno de cada carril
-  for (const s of dayShifts) {
-    const start = toMin(s.start), end = start + durMin(s.start, s.end);
-    let lane = laneEnds.findIndex((e) => e <= start);
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(end); } else laneEnds[lane] = end;
-    laneOf.set(s.id, lane);
+/** Asigna "carriles" a los segmentos que se solapan en una columna-día (para mostrarlos lado a lado). */
+function assignLanes(segs: Seg[]): { laneOf: Map<string, number>; count: number } {
+  const laneOf = new Map<string, number>();
+  const laneEnds: number[] = []; // fin (min) del último segmento de cada carril
+  for (const seg of segs) {
+    let lane = laneEnds.findIndex((e) => e <= seg.startM);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(seg.endM); } else laneEnds[lane] = seg.endM;
+    laneOf.set(seg.key, lane);
   }
   return { laneOf, count: Math.max(1, laneEnds.length) };
 }
