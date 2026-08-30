@@ -38,6 +38,16 @@ function fmt(field: string, v: string | null): string {
   return v == null || v === "" ? "—" : v;
 }
 
+/** Variación % en cambios de precio (neutral: la flecha marca dirección, no juicio). */
+function priceDelta(field: string, oldV: string | null, newV: string | null): { pct: number; up: boolean } | null {
+  if (field !== "price" && field !== "promotionalPrice") return null;
+  const o = Number(oldV), n = Number(newV);
+  if (!isFinite(o) || !isFinite(n) || o <= 0 || o === n) return null;
+  const pct = Math.round(((n - o) / o) * 100);
+  if (pct === 0) return null;
+  return { pct, up: n > o };
+}
+
 function relTime(iso: string): string {
   const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return "recién";
@@ -61,30 +71,35 @@ export default function ChangesClient() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [date, setDate] = useState(""); // "" = recientes; "YYYY-MM-DD" = un día puntual
+  const [field, setField] = useState(""); // tipo de cambio
+  const [sync, setSync] = useState("");   // "" | "pending"
+  const [q, setQ] = useState("");         // búsqueda por producto
+  const [dq, setDq] = useState("");       // q con debounce
+  useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 300); return () => clearTimeout(t); }, [q]);
 
-  const fetchLogs = useCallback(async (opts: { date?: string; before?: number; append?: boolean }) => {
+  const filtered = !!(field || sync || dq);
+
+  const fetchLogs = useCallback(async (opts: { before?: number; append?: boolean }) => {
     const params = new URLSearchParams();
-    if (opts.date) {
-      const [y, m, d] = opts.date.split("-").map(Number);
+    if (date) {
+      const [y, m, d] = date.split("-").map(Number);
       params.set("from", new Date(y, m - 1, d, 0, 0, 0).toISOString());
       params.set("to", new Date(y, m - 1, d + 1, 0, 0, 0).toISOString());
     } else if (opts.before) {
       params.set("before", String(opts.before));
     }
+    if (field) params.set("field", field);
+    if (sync) params.set("sync", sync);
+    if (dq) params.set("q", dq);
     const res = await fetch(`/api/changelog?${params.toString()}`).then((r) => r.json());
     setPending(res.pending || 0);
     setHasMore(!!res.hasMore);
     setLogs((prev) => (opts.append ? [...prev, ...(res.logs || [])] : res.logs || []));
-  }, []);
+  }, [date, field, sync, dq]);
 
-  const loadRecent = useCallback(async () => { setLoading(true); try { await fetchLogs({}); } finally { setLoading(false); } }, [fetchLogs]);
-  useEffect(() => { loadRecent(); }, [loadRecent]);
+  // Recarga desde arriba cuando cambia cualquier filtro.
+  useEffect(() => { setLoading(true); fetchLogs({}).finally(() => setLoading(false)); }, [fetchLogs]);
 
-  function pickDate(v: string) {
-    if (!v) { setDate(""); loadRecent(); return; }
-    setDate(v); setLoading(true);
-    fetchLogs({ date: v }).finally(() => setLoading(false));
-  }
   async function loadMore() {
     if (!logs.length) return;
     setLoadingMore(true);
@@ -116,11 +131,28 @@ export default function ChangesClient() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-              <input type="date" value={date} onChange={(e) => pickDate(e.target.value)} className="input" style={{ width: "auto", padding: "7px 10px", fontSize: "0.8125rem" }} />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-subtle)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Filtrar por fecha" className="input" style={{ width: "auto", padding: "7px 10px", fontSize: "0.8125rem" }} />
             </div>
-            {date && <button className="btn-secondary" onClick={() => pickDate("")} style={{ whiteSpace: "nowrap" }}>Recientes</button>}
+            {date && <button className="btn-secondary" onClick={() => setDate("")} style={{ whiteSpace: "nowrap" }}>Recientes</button>}
           </div>
+        </div>
+
+        {/* Barra de filtros */}
+        <div className="anim-up" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 22 }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto…" aria-label="Buscar producto"
+            className="input" style={{ width: 200, padding: "7px 11px", fontSize: "0.8125rem" }} />
+          <select value={field} onChange={(e) => setField(e.target.value)} aria-label="Tipo de cambio"
+            className="input" style={{ width: "auto", padding: "7px 10px", fontSize: "0.8125rem", cursor: "pointer" }}>
+            <option value="">Todos los cambios</option>
+            {Object.entries(FIELD).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={sync} onChange={(e) => setSync(e.target.value)} aria-label="Estado de sincronización"
+            className="input" style={{ width: "auto", padding: "7px 10px", fontSize: "0.8125rem", cursor: "pointer" }}>
+            <option value="">Todo estado</option>
+            <option value="pending">Sin sincronizar</option>
+          </select>
+          {filtered && <button className="btn-secondary" onClick={() => { setField(""); setSync(""); setQ(""); }} style={{ fontSize: "0.8125rem", whiteSpace: "nowrap" }}>Limpiar</button>}
         </div>
 
         {/* Pending-sync banner */}
@@ -142,8 +174,8 @@ export default function ChangesClient() {
         ) : logs.length === 0 ? (
           <div className="anim-up delay-1 card" style={{ padding: "56px 24px", textAlign: "center", borderStyle: "dashed" }}>
             <div style={{ fontSize: "1.5rem", marginBottom: 8 }}>🗓️</div>
-            <p style={{ fontSize: "0.9375rem", color: "var(--color-ink)", fontWeight: 600, margin: "0 0 4px" }}>{date ? "Sin cambios ese día" : "Todavía no hay actividad"}</p>
-            <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", margin: 0 }}>{date ? "Probá con otra fecha o volvé a los cambios recientes." : "Cuando edites productos o sincronices la tienda, los cambios aparecerán acá."}</p>
+            <p style={{ fontSize: "0.9375rem", color: "var(--color-ink)", fontWeight: 600, margin: "0 0 4px" }}>{date || filtered ? "Sin cambios para este filtro" : "Todavía no hay actividad"}</p>
+            <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", margin: 0 }}>{date || filtered ? "Probá con otra fecha o quitá los filtros." : "Cuando edites productos o sincronices la tienda, los cambios aparecerán acá."}</p>
           </div>
         ) : (
           <div className="anim-up delay-1" style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -196,6 +228,14 @@ function Row({ log, first }: { log: Log; first: boolean }) {
             <span style={{ color: "var(--color-subtle)", textDecoration: "line-through" }}>{fmt(log.field, log.oldValue)}</span>
             <span style={{ color: "var(--color-subtle)" }}>→</span>
             <span style={{ color: "var(--color-ink)", fontWeight: 500 }}>{fmt(log.field, log.newValue)}</span>
+            {(() => {
+              const d = priceDelta(log.field, log.oldValue, log.newValue);
+              return d ? (
+                <span style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-muted)", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+                  {d.up ? "▲" : "▼"} {Math.abs(d.pct)}%
+                </span>
+              ) : null;
+            })()}
           </div>
         </div>
 

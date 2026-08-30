@@ -16,16 +16,20 @@ export async function GET(req: Request) {
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
   const before = url.searchParams.get("before");
+  const field = url.searchParams.get("field");   // tipo de cambio exacto
+  const q = url.searchParams.get("q");            // nombre de producto contiene
+  const sync = url.searchParams.get("sync");      // "pending" = productos sin sincronizar
 
-  let where: Prisma.ChangelogWhereInput = {};
-  let take = PAGE;
+  // Filtros combinables (fecha/cursor + tipo + búsqueda + estado de sync).
+  const and: Prisma.ChangelogWhereInput[] = [];
   const dayMode = !!(from && to);
-  if (dayMode) {
-    where = { createdAt: { gte: new Date(from!), lt: new Date(to!) } };
-    take = 2000; // a full day's worth
-  } else if (before) {
-    where = { id: { lt: Number(before) } };
-  }
+  let take = PAGE;
+  if (dayMode) { and.push({ createdAt: { gte: new Date(from!), lt: new Date(to!) } }); take = 2000; }
+  else if (before) { and.push({ id: { lt: Number(before) } }); }
+  if (field) and.push({ field });
+  if (q && q.trim()) and.push({ product: { name: { contains: q.trim() } } });
+  if (sync === "pending") and.push({ product: { syncStatus: { in: ["modified", "error"] } } });
+  const where: Prisma.ChangelogWhereInput = and.length ? { AND: and } : {};
 
   const [logs, pending] = await Promise.all([
     prisma.changelog.findMany({
