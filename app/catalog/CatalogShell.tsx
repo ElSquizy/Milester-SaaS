@@ -141,7 +141,7 @@ export default function CatalogShell({
   const effectiveView = isMobile ? "cards" : view;
   const [advanced, setAdvanced] = useState(false);
   // Lives here (not in the modal) so it survives moving between products.
-  const [modalTab, setModalTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo">("general");
+  const [modalTab, setModalTab] = useState<"general" | "descripcion" | "imagen" | "variantes" | "seo" | "precios">("general");
 
   // Focus set (browser-local). Entering focus just filters the catalog to those
   // ids, so the modal's prev/next then walks the working set for free.
@@ -588,7 +588,7 @@ export default function CatalogShell({
             product={editProduct}
             onClose={closeEdit}
             onSaved={closeEdit}
-            onAdvanced={() => setAdvanced(true)}
+            onAdvanced={(t) => { if (t) setModalTab(t as typeof modalTab); setAdvanced(true); }}
           />
         )}
 

@@ -4,6 +4,8 @@ import CollectionPicker from "./CollectionPicker";
 import VariantsManager from "./VariantsManager";
 import DescriptionEditor, { type Tmpl } from "./DescriptionEditor";
 import ImageTab from "./ImageTab";
+import PriceHistoryTable from "./PriceHistoryTable";
+import { PRICE_FIELDS } from "@/lib/priceSeries";
 import type { TemplateData } from "@/lib/descriptionTemplates";
 import { useIsMobile } from "@/components/useIsMobile";
 import { notifyPendingChanged } from "@/lib/pendingEvent";
@@ -14,6 +16,10 @@ type Product = {
   id: number;
   tiendaNubeId: string | null;
   name: string;
+  price: number;
+  promotionalPrice: number | null;
+  costUsd: number | null;
+  costUsdPromo: number | null;
   description: string | null;
   descriptionTemplateId: number | null;
   descriptionData: string | null;
@@ -30,7 +36,7 @@ type Product = {
   categoryChips: Array<{ id: number; name: string }>;
 };
 
-type Tab = "general" | "descripcion" | "imagen" | "variantes" | "seo";
+type Tab = "general" | "descripcion" | "imagen" | "variantes" | "seo" | "precios";
 
 interface Props {
   product: Product;
@@ -237,6 +243,7 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
               ["imagen", "Imagen"],
               ["variantes", "Variantes"],
               ["seo", "SEO"],
+              ["precios", "Precios"],
             ] as const).map(([v, label]) => (
               <button key={v} onClick={() => setTab(v)} style={{
                 position: "relative", padding: "13px 14px", border: "none", background: "transparent", cursor: "pointer",
@@ -331,6 +338,16 @@ export default function ProductModal({ product, tab, setTab, navIndex, navTotal,
             )}
 
             {tab === "variantes" && <VariantsManager productId={product.id} />}
+
+            {tab === "precios" && (
+              <div style={{ maxWidth: 720 }}>
+                <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", margin: "0 0 16px" }}>
+                  Cada guardado de precios queda registrado. Lo más nuevo, arriba.
+                </p>
+                <PriceHistoryTable productId={product.id} fields={PRICE_FIELDS}
+                  current={{ price: product.price, promotionalPrice: product.promotionalPrice, costUsd: product.costUsd, costUsdPromo: product.costUsdPromo }} />
+              </div>
+            )}
 
             {tab === "seo" && (
               <div style={{ maxWidth: 560, display: "flex", flexDirection: "column", gap: 18 }}>

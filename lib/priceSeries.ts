@@ -41,42 +41,47 @@ export function valueAt(bps: BP[], t: number): number | null {
   return found ? v : null;
 }
 
-/**
- * Puntos de una serie DENTRO de una ventana [from, to], para una línea suave:
- * un punto de "entrada" con el precio vigente al inicio de la ventana (aunque el
- * último cambio haya sido antes), los cambios reales dentro de la ventana, y el
- * valor actual al final. Solo puntos reales (sin escalones), para interpolar.
- */
-export function windowPoints(bps: BP[], from: number, to: number): BP[] {
-  const pts: BP[] = [];
-  const vFrom = valueAt(bps, from);
-  if (vFrom != null) pts.push({ t: from, v: vFrom });
-  for (const b of bps) if (b.t > from && b.t < to && b.v != null) pts.push({ t: b.t, v: b.v });
-  const vTo = valueAt(bps, to);
-  if (vTo != null) pts.push({ t: to, v: vTo });
-  return pts;
+export const PRICE_FIELDS = ["price", "promotionalPrice", "costUsd", "costUsdPromo"] as const;
+export type PriceField = (typeof PRICE_FIELDS)[number];
+
+/** Variación porcentual from→to (null si no aplica: sin base, sin cambio, o algún null). */
+export function pctChange(from: number | null, to: number | null): number | null {
+  if (from == null || to == null || from <= 0 || from === to) return null;
+  return Math.round(((to - from) / from) * 100);
 }
 
-/**
- * Filas para Recharts a partir de conjuntos de puntos dispersos: cada serie
- * aporta su valor solo en los timestamps donde tiene un punto; en el resto va
- * null y la curva lo puentea (connectNulls) para verse suave.
- */
-export function unifiedSparse(sets: { key: string; pts: BP[] }[]): Record<string, number | null>[] {
-  const times = [...new Set(sets.flatMap((s) => s.pts.map((p) => p.t)))].sort((a, b) => a - b);
-  const maps = sets.map((s) => [s.key, new Map(s.pts.map((p) => [p.t, p.v] as const))] as const);
-  return times.map((t) => {
-    const row: Record<string, number | null> = { t };
-    for (const [key, m] of maps) row[key] = m.has(t) ? m.get(t)! : null;
-    return row;
-  });
-}
+export type Moment = {
+  t: number;
+  now?: boolean;                                                              // fila "Ahora"
+  values: Record<string, number | null>;                                     // estado de los 4 precios
+  changed: Record<string, { from: number | null; to: number | null; pct: number | null }>; // qué se movió + %
+};
 
-/** Dominio [min, max] con ~12% de aire arriba y abajo, para que la línea no se corte. */
-export function paddedDomain(values: number[]): [number, number] | undefined {
-  if (!values.length) return undefined;
-  const min = Math.min(...values), max = Math.max(...values);
-  if (min === max) { const p = Math.abs(min) * 0.1 || 1; return [Math.max(0, min - p), max + p]; }
-  const pad = (max - min) * 0.12;
-  return [Math.max(0, min - pad), max + pad];
+/**
+ * "Planilla versionada": la fila "Ahora" (estado actual) arriba, y debajo un
+ * momento por cada guardado de precios (cambios dentro de 60s = un mismo save),
+ * lo más nuevo primero. Cada momento trae el estado completo de los 4 precios y
+ * cuáles cambiaron con su %.
+ */
+export function priceMoments(changes: Change[], current: Record<string, number | null>): Moment[] {
+  const bps: Record<string, BP[]> = {};
+  for (const f of PRICE_FIELDS) bps[f] = fieldBreakpoints(changes.filter((c) => c.field === f));
+
+  const priceChanges = changes
+    .filter((c) => (PRICE_FIELDS as readonly string[]).includes(c.field))
+    .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)); // desc
+
+  const parse = (v: string | null) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
+  const WINDOW = 60000;
+  const moments: Moment[] = [];
+  for (const c of priceChanges) {
+    const t = new Date(c.createdAt).getTime();
+    let m = moments[moments.length - 1];
+    if (!m || Math.abs(m.t - t) > WINDOW) { m = { t, values: {}, changed: {} }; moments.push(m); }
+    const from = parse(c.oldValue), to = parse(c.newValue);
+    m.changed[c.field] = { from, to, pct: pctChange(from, to) };
+  }
+  for (const m of moments) for (const f of PRICE_FIELDS) m.values[f] = valueAt(bps[f], m.t);
+
+  return [{ t: Date.now(), now: true, values: { ...current }, changed: {} }, ...moments];
 }

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import CollectionPicker from "./CollectionPicker";
-import PriceHistoryChart from "./PriceHistoryChart";
+import PriceHistoryTable from "./PriceHistoryTable";
 import { isInFocus, toggleFocus } from "./useFocus";
 import { useIsMobile } from "@/components/useIsMobile";
 import { notifyPendingChanged } from "@/lib/pendingEvent";
@@ -41,7 +41,7 @@ interface Props {
   product: Product;
   onClose: () => void;
   onSaved: () => void;
-  onAdvanced: () => void;
+  onAdvanced: (tab?: string) => void;
 }
 
 const fmt = (n: number) => `$${n.toLocaleString("es-AR")}`;
@@ -244,7 +244,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
         </div>
 
         {/* Advanced-edit hint bar */}
-        <button onClick={onAdvanced} style={{
+        <button onClick={() => onAdvanced()} style={{
           display: "flex", alignItems: "center", gap: 8, width: "100%",
           padding: "10px 20px", border: "none", borderBottom: "1px solid var(--color-divider)",
           background: "var(--color-brand-light)", color: "var(--color-brand)",
@@ -294,7 +294,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
                           style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: "0.875rem", color: "var(--color-ink)", fontVariantNumeric: "tabular-nums" }} />}
                   </div>
                 ) : (
-                  <button onClick={onAdvanced} style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)", background: "var(--color-surface)", cursor: "pointer", fontSize: "0.8125rem", color: "var(--color-muted)" }}>
+                  <button onClick={() => onAdvanced()} style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "10px 12px", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)", background: "var(--color-surface)", cursor: "pointer", fontSize: "0.8125rem", color: "var(--color-muted)" }}>
                     {product.variants.length} variantes →
                   </button>
                 )}
@@ -344,7 +344,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
             {/* Historial de precios */}
             <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 16, marginTop: 4 }}>
               <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", marginBottom: 10 }}>Historial de precios</div>
-              <PriceHistoryChart productId={product.id} current={{ price: product.price, promotionalPrice: product.promotionalPrice, costUsd: product.costUsd, costUsdPromo: product.costUsdPromo }} />
+              <PriceHistoryTable productId={product.id} current={{ price: product.price, promotionalPrice: product.promotionalPrice, costUsd: product.costUsd, costUsdPromo: product.costUsdPromo }} fields={["price", "promotionalPrice"]} limit={6} onSeeAll={() => onAdvanced("precios")} />
             </div>
 
             {/* Tags */}
@@ -374,7 +374,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
 
             {/* Templates status — the moulds live in advanced edit */}
             <Field label="Plantillas">
-              <button onClick={onAdvanced} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)", background: "var(--color-surface)", cursor: "pointer", textAlign: "left" }}>
+              <button onClick={() => onAdvanced()} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", borderRadius: "var(--radius-input)", border: "1px solid var(--color-border)", background: "var(--color-surface)", cursor: "pointer", textAlign: "left" }}>
                 <TemplateChip ok={product.descriptionTemplateId != null} label="Descripción" />
                 <TemplateChip ok={product.imageTemplateId != null} label="Imagen" />
                 <span style={{ marginLeft: "auto", fontSize: "0.8125rem", color: "var(--color-brand)", fontWeight: 600 }}>Editar →</span>
