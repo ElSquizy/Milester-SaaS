@@ -405,7 +405,7 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
                       <div style={{ color: "var(--color-muted)", fontSize: "0.75rem", marginBottom: 2 }}>{d.label}</div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ color: "var(--color-subtle)", textDecoration: "line-through" }}>{d.from}</span>
-                        <span style={{ color: "var(--color-faint)" }}>→</span>
+                        <span style={{ color: "var(--color-subtle)" }}>→</span>
                         <span style={{ color: "var(--color-ink)", fontWeight: 600 }}>{d.to}</span>
                       </div>
                     </div>

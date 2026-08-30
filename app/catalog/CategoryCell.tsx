@@ -83,7 +83,7 @@ export default function CategoryCell({ productId, current }: {
         }}
       >
         {current.length === 0 ? (
-          <span style={{ fontSize: "0.8125rem", color: "var(--color-faint)" }}>+ Colección</span>
+          <span style={{ fontSize: "0.8125rem", color: "var(--color-subtle)" }}>+ Colección</span>
         ) : (
           <>
             {current.slice(0, 2).map((c) => (
@@ -136,7 +136,7 @@ export default function CategoryCell({ productId, current }: {
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>{on ? "✓" : ""}</span>
                   <span style={{ flex: 1, fontSize: "0.8125rem", color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
-                  <span style={{ fontSize: "0.6875rem", color: "var(--color-faint)", fontVariantNumeric: "tabular-nums" }}>{c.count}</span>
+                  <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums" }}>{c.count}</span>
                 </button>
               );
             })}

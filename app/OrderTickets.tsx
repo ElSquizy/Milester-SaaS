@@ -370,7 +370,7 @@ function TicketComposer({ ticket, isMobile, onClose, onSaved }: {
               <label style={fieldLabel}>Dólar del día
                 <input className="input" value={exchangeRate} onChange={(e) => setExchangeRate(e.target.value)} placeholder="Ej: 1450" inputMode="decimal" />
               </label>
-              <label style={fieldLabel}>Nº de pedido web <span style={{ fontWeight: 400, color: "var(--color-faint)" }}>(si compró online)</span>
+              <label style={fieldLabel}>Nº de pedido web <span style={{ fontWeight: 400, color: "var(--color-subtle)" }}>(si compró online)</span>
                 <input className="input" value={linkedOrderNumber} onChange={(e) => setLinkedOrderNumber(e.target.value)} placeholder="Opcional" inputMode="numeric" />
               </label>
             </div>

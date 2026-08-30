@@ -689,7 +689,7 @@ function StageCosts({ selected, promoCosts, setPromoCosts, baseCosts, setBaseCos
               <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: costMissing ? "var(--color-warning)" : "var(--color-subtle)" }}>
                 {costMissing ? "Costo USD (falta)" : "Costo USD"}
                 <div style={{ position: "relative", width: 96 }}>
-                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-faint)", pointerEvents: "none" }}>US$</span>
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-subtle)", pointerEvents: "none" }}>US$</span>
                   <input className="input" inputMode="decimal" value={bc?.edited ?? ""} placeholder="—"
                     onChange={(e) => setBaseCosts((prev) => { const n = new Map(prev); n.set(p.id, { current: bc?.current ?? null, edited: e.target.value }); return n; })}
                     style={{ paddingLeft: 32, padding: "6px 8px 6px 32px", fontSize: "0.8125rem", fontVariantNumeric: "tabular-nums", borderColor: costMissing ? "var(--color-warning)" : undefined }} />
@@ -699,7 +699,7 @@ function StageCosts({ selected, promoCosts, setPromoCosts, baseCosts, setBaseCos
               <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-brand)" }}>
                 Costo USD Promo
                 <div style={{ position: "relative", width: 96 }}>
-                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-faint)", pointerEvents: "none" }}>US$</span>
+                  <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-subtle)", pointerEvents: "none" }}>US$</span>
                   <input className="input" inputMode="decimal" value={raw} placeholder="0"
                     onChange={(e) => setPromoCosts((prev) => { const n = new Map(prev); n.set(p.id, e.target.value); return n; })}
                     style={{ paddingLeft: 32, padding: "6px 8px 6px 32px", fontSize: "0.8125rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }} />

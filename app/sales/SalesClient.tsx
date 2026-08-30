@@ -156,7 +156,7 @@ export default function SalesClient({ orders, total, page, totalPages, currentQ,
                       {o.source === "local" && <span style={{ marginLeft: 6, fontSize: "0.625rem", color: "var(--color-info)", fontWeight: 600 }}>LOCAL</span>}
                     </td>
                     <td style={{ ...td, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
-                      {o.customerName || <span style={{ color: "var(--color-faint)" }}>—</span>}
+                      {o.customerName || <span style={{ color: "var(--color-subtle)" }}>—</span>}
                     </td>
                     <td style={{ ...td, color: "var(--color-subtle)", whiteSpace: "nowrap" }}>{fmtDate(o.orderedAt)}</td>
                     <td style={{ ...td, textAlign: "right", color: "var(--color-muted)", fontVariantNumeric: "tabular-nums" }}>{o._count.items}</td>

@@ -63,7 +63,7 @@ export default function ImageComposer({
       )}
       {/* Empty state */}
       {!backgroundUrl && !coverUrl && !productUrl && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-faint)", fontSize: "0.8125rem" }}>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-subtle)", fontSize: "0.8125rem" }}>
           Sin capas
         </div>
       )}

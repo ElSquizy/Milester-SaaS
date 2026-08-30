@@ -145,7 +145,7 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
         </span>
         <button onClick={() => setWeekStart((w) => addWeeks(w, 1))} style={navBtn}>›</button>
         <button onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))} className="btn-secondary" style={{ padding: "6px 12px", fontSize: "0.8125rem" }}>Esta semana</button>
-        {loading && <span style={{ fontSize: "0.75rem", color: "var(--color-faint)" }}>cargando…</span>}
+        {loading && <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>cargando…</span>}
         <label style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.8125rem", color: "var(--color-muted)", cursor: "pointer" }}>
           <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
           <span style={{ width: 11, height: 11, borderRadius: 3, background: "rgba(234,88,12,0.45)" }} />
@@ -175,7 +175,7 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
             {/* Etiquetas de hora */}
             <div>
               {HOURS.map((h) => (
-                <div key={h} style={{ height: ROW_H, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", paddingRight: 6, paddingTop: 2, fontSize: "0.6875rem", color: "var(--color-faint)", fontVariantNumeric: "tabular-nums", borderTop: "1px solid var(--color-divider)" }}>
+                <div key={h} style={{ height: ROW_H, display: "flex", alignItems: "flex-start", justifyContent: "flex-end", paddingRight: 6, paddingTop: 2, fontSize: "0.6875rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums", borderTop: "1px solid var(--color-divider)" }}>
                   {String(h).padStart(2, "0")}:00
                 </div>
               ))}
@@ -223,7 +223,7 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
           </div>
         </div>
       </div>
-      <p style={{ fontSize: "0.75rem", color: "var(--color-faint)", marginTop: 8 }}>
+      <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 8 }}>
         Clic en una franja para asignar el turno al empleado seleccionado. El sombreado naranja marca las horas de más ventas (últimos 90 días) — así ves si estás cubriendo la demanda.
       </p>
 

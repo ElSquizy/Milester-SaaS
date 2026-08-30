@@ -479,7 +479,7 @@ function DetailsForm({ common, editable, isMobile, descTemplates, imageTemplates
         <label style={fieldLbl}>SEO · Descripción
           <input className="input" disabled={!editable} value={seoDesc} onChange={(e) => setSeoDesc(e.target.value)} onBlur={() => { if ((seoDesc.trim() || null) !== (common.seoDescription ?? null)) onChange({ seoDescription: seoDesc.trim() || null }); }} style={{ background: "var(--color-surface)" }} />
         </label>
-        <label style={{ ...fieldLbl, gridColumn: isMobile ? undefined : "1 / -1" }}>Etiquetas <span style={{ fontWeight: 400, color: "var(--color-faint)" }}>(separadas por coma)</span>
+        <label style={{ ...fieldLbl, gridColumn: isMobile ? undefined : "1 / -1" }}>Etiquetas <span style={{ fontWeight: 400, color: "var(--color-subtle)" }}>(separadas por coma)</span>
           <input className="input" disabled={!editable} value={tags} onChange={(e) => setTags(e.target.value)} onBlur={commitTags} style={{ background: "var(--color-surface)" }} />
         </label>
       </div>
@@ -487,7 +487,7 @@ function DetailsForm({ common, editable, isMobile, descTemplates, imageTemplates
       {/* Colecciones */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)" }}>Colecciones <span style={{ fontWeight: 400, color: "var(--color-faint)" }}>· {catIds.size}</span></span>
+          <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)" }}>Colecciones <span style={{ fontWeight: 400, color: "var(--color-subtle)" }}>· {catIds.size}</span></span>
           {editable && <button onClick={() => setShowCats((v) => !v)} style={{ border: "none", background: "transparent", color: "var(--color-brand)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}>{showCats ? "Listo" : "Editar"}</button>}
         </div>
         {showCats && editable ? (

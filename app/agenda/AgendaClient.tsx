@@ -24,7 +24,7 @@ function dueMeta(iso: string | null, done: boolean): { label: string; color: str
   const d = new Date(iso);
   const days = Math.floor((d.getTime() - Date.now()) / 86400000);
   const fmt = d.toLocaleDateString("es-AR", { day: "numeric", month: "short" });
-  if (done) return { label: fmt, color: "var(--color-faint)" };
+  if (done) return { label: fmt, color: "var(--color-subtle)" };
   if (days < 0) return { label: `${fmt} · vencida`, color: "var(--color-danger)" };
   if (days === 0) return { label: "Hoy", color: "var(--color-warning)" };
   if (days === 1) return { label: "Mañana", color: "var(--color-warning)" };
@@ -199,7 +199,7 @@ function TaskRow({ task, onToggleDone, onEdit }: { task: Task; onToggleDone: () 
       <span style={{ fontSize: "0.625rem", fontWeight: 700, padding: "2px 7px", borderRadius: "var(--radius-pill)", background: pr.bg, color: pr.fg, flexShrink: 0 }}>{pr.label}</span>
       {task.assignee
         ? <span title={task.assignee.name} style={{ display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0, fontSize: "0.75rem", color: "var(--color-muted)" }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: task.assignee.color }} />{task.assignee.name}</span>
-        : <span style={{ fontSize: "0.75rem", color: "var(--color-faint)", flexShrink: 0 }}>—</span>}
+        : <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)", flexShrink: 0 }}>—</span>}
       {!done && <span style={{ width: 6, height: 6, borderRadius: "50%", background: st.color, flexShrink: 0 }} title={st.label} />}
     </div>
   );
@@ -357,7 +357,7 @@ function TeamModal({ employees, onClose, onChanged }: { employees: Employee[]; o
             </div>
             <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums" }}>{e.openTasks} abiertas</span>
             <button onClick={() => toggleActive(e)} className="btn-secondary" style={{ padding: "4px 9px", fontSize: "0.6875rem" }}>{e.active ? "Desactivar" : "Activar"}</button>
-            <button onClick={() => remove(e)} title="Eliminar" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", padding: 2 }}>✕</button>
+            <button onClick={() => remove(e)} title="Eliminar" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", padding: 2 }}>✕</button>
           </div>
         ))}
       </div>

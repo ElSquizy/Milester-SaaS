@@ -151,7 +151,7 @@ export default function MetricsClient({
                   </span>
                 )}
               </div>
-              <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)", marginTop: 4 }}>vs. período anterior</div>
+              <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 4 }}>vs. período anterior</div>
             </div>
           ))}
         </div>
@@ -301,7 +301,7 @@ function ProjectionCard({ p }: { p: Projection }) {
               </span>
             )}
           </div>
-          <div style={{ fontSize: "0.75rem", color: "var(--color-faint)", marginTop: 6 }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 6 }}>
             ~{num(p.projectedOrders)} pedidos · confianza <span style={{ color: confColor, fontWeight: 600 }}>{p.confidence}</span>
           </div>
         </div>
@@ -313,7 +313,7 @@ function ProjectionCard({ p }: { p: Projection }) {
           <div style={{ height: 8, borderRadius: 999, background: "var(--color-surface-2)", overflow: "hidden" }}>
             <div style={{ width: `${pct}%`, height: "100%", background: "var(--color-brand)", borderRadius: 999 }} />
           </div>
-          <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)", marginTop: 6 }}>
+          <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 6 }}>
             Estimado por ritmo de venta del mes. {p.confidence === "baja" && "Con pocos días transcurridos es solo orientativo."}
           </div>
         </div>
@@ -438,7 +438,7 @@ function HeatmapSection({ cells }: { cells: HeatCell[] }) {
             </Fragment>
           ))}
         </div>
-        <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)", marginTop: 10 }}>Intensidad = cantidad de ventas (horario AR). Pasá el cursor para ver el detalle.</div>
+        <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 10 }}>Intensidad = cantidad de ventas (horario AR). Pasá el cursor para ver el detalle.</div>
       </div>
     </div>
   );
@@ -505,11 +505,11 @@ function CampaignEffectSection({ effects }: { effects: CampaignEffect[] }) {
             </div>
             <div style={{ width: 92, textAlign: "right" }}>
               {e.liftPct == null
-                ? <span style={{ fontSize: "0.75rem", color: "var(--color-faint)" }}>sin base</span>
+                ? <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>sin base</span>
                 : <span style={{ fontSize: "0.9375rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: e.liftPct > 0 ? "var(--color-success)" : e.liftPct < 0 ? "var(--color-danger)" : "var(--color-subtle)" }}>
                     {e.liftPct > 0 ? "▲" : e.liftPct < 0 ? "▼" : "→"} {Math.abs(e.liftPct)}%
                   </span>}
-              <div style={{ fontSize: "0.625rem", color: "var(--color-faint)" }}>vs. antes</div>
+              <div style={{ fontSize: "0.625rem", color: "var(--color-subtle)" }}>vs. antes</div>
             </div>
           </div>
         ))}
@@ -609,7 +609,7 @@ function Row({ name, sub, right, rightSub, tone }: { name: string; sub: string; 
       </div>
       <div style={{ textAlign: "right", flexShrink: 0 }}>
         <div style={{ fontSize: "0.8125rem", fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>{right}</div>
-        <div style={{ fontSize: "0.625rem", color: "var(--color-faint)" }}>{rightSub}</div>
+        <div style={{ fontSize: "0.625rem", color: "var(--color-subtle)" }}>{rightSub}</div>
       </div>
     </div>
   );

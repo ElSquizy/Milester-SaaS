@@ -160,8 +160,8 @@ export default function PricingClient({ initialSettings }: { initialSettings: Pr
           );
         })}
         <td style={{ ...td, whiteSpace: "nowrap", fontSize: "0.75rem" }}>
-          {!summary ? <span style={{ color: "var(--color-faint)" }}>…</span>
-            : !st ? <span style={{ color: "var(--color-faint)" }}>—</span>
+          {!summary ? <span style={{ color: "var(--color-subtle)" }}>…</span>
+            : !st ? <span style={{ color: "var(--color-subtle)" }}>—</span>
             : <><span style={{ color: "var(--color-muted)" }}>{st.products}</span>{st.misaligned > 0 && <span style={{ color: "var(--color-warning)", fontWeight: 700 }}> · {st.misaligned} ⚠</span>}</>}
         </td>
         <td style={{ ...td, textAlign: "right" }}>
@@ -235,7 +235,7 @@ export default function PricingClient({ initialSettings }: { initialSettings: Pr
           <label style={{ display: "flex", flexDirection: "column", gap: 3, ...lbl }}>Descuento transferencia
             <div style={{ position: "relative", marginTop: 2 }}>
               <input className="input" inputMode="decimal" value={profile.transferPct || ""} placeholder="0" onChange={(e) => patchProfile({ transferPct: parseFloat(e.target.value.replace(",", ".")) || 0 })} style={{ width: 90, paddingRight: 22, textAlign: "right", fontVariantNumeric: "tabular-nums" }} />
-              <span style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: "var(--color-faint)", fontSize: "0.8125rem" }}>%</span>
+              <span style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", color: "var(--color-subtle)", fontSize: "0.8125rem" }}>%</span>
             </div>
           </label>
           {!profile.isDefault && (
@@ -251,7 +251,7 @@ export default function PricingClient({ initialSettings }: { initialSettings: Pr
         ) : (
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)" }}>Colecciones del perfil <span style={{ fontWeight: 400, color: "var(--color-faint)" }}>· {profile.collectionIds.length}</span></span>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)" }}>Colecciones del perfil <span style={{ fontWeight: 400, color: "var(--color-subtle)" }}>· {profile.collectionIds.length}</span></span>
               <button onClick={() => setShowCollections((v) => !v)} style={{ border: "none", background: "transparent", color: "var(--color-brand)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}>{showCollections ? "Listo" : "Editar"}</button>
             </div>
             {showCollections ? (
@@ -443,7 +443,7 @@ function CostInput({ value, onCommit }: { value: number; onCommit: (v: number) =
   useEffect(() => { setD(String(value || "")); }, [value]);
   return (
     <div style={{ position: "relative" }}>
-      <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--color-faint)", fontSize: "0.6875rem" }}>US$</span>
+      <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--color-subtle)", fontSize: "0.6875rem" }}>US$</span>
       <input className="input" inputMode="decimal" value={d} onChange={(e) => setD(e.target.value)} onBlur={() => onCommit(parseFloat(d.replace(",", ".")) || 0)}
         style={{ width: 86, padding: "5px 8px 5px 32px", fontSize: "0.8125rem", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }} />
     </div>
@@ -475,7 +475,7 @@ function PriceCell({ calc, override, onCommit }: { calc: number; override: numbe
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <div style={{ position: "relative" }}>
-        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--color-faint)", fontSize: "0.75rem" }}>$</span>
+        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", color: "var(--color-subtle)", fontSize: "0.75rem" }}>$</span>
         <input className="input" inputMode="numeric" value={d} onChange={(e) => setD(e.target.value)} onBlur={() => { const v = parseInt(d.replace(/\./g, "")); onCommit(isNaN(v) || v <= 0 ? null : v); }}
           style={{ width: 104, padding: "5px 8px 5px 18px", fontSize: "0.8125rem", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, borderColor: override != null ? "var(--color-info)" : undefined }} />
       </div>

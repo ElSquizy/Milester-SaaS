@@ -83,7 +83,7 @@ function TreeRow({ node, depth, selectedIds, onToggle, flat }: {
         <span style={{ color: checked ? "var(--color-ink)" : "var(--color-muted)", fontWeight: checked ? 500 : 400, flex: 1 }}>
           {node.name}
         </span>
-        <span style={{ fontSize: "0.6875rem", color: "var(--color-faint)", fontVariantNumeric: "tabular-nums" }}>{node.count}</span>
+        <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums" }}>{node.count}</span>
       </label>
       {!flat && node.children.map((c) => (
         <TreeRow key={c.id} node={c} depth={depth + 1} selectedIds={selectedIds} onToggle={onToggle} flat={flat} />

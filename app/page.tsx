@@ -221,7 +221,7 @@ export default async function HomePage() {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)", marginTop: 4 }}>vs. mes anterior</div>
+                  <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 4 }}>vs. mes anterior</div>
                 </div>
               ))}
             </div>
@@ -281,7 +281,7 @@ export default async function HomePage() {
                       {a.label}
                     </div>
                   </div>
-                  <span style={{ color: "var(--color-faint)", flexShrink: 0 }}>→</span>
+                  <span style={{ color: "var(--color-subtle)", flexShrink: 0 }}>→</span>
                 </Link>
               ))}
             </div>
@@ -295,7 +295,7 @@ export default async function HomePage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                 <h2 style={widgetH2}>Hoy en la tienda</h2>
-                {todayShifts.length > 0 && <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-faint)", fontVariantNumeric: "tabular-nums" }}>{todayShifts.length} en turno</span>}
+                {todayShifts.length > 0 && <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums" }}>{todayShifts.length} en turno</span>}
               </div>
               <Link href="/agenda" style={widgetLink}>Horarios →</Link>
             </div>
@@ -334,7 +334,7 @@ export default async function HomePage() {
                         <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-brand)" }}>{chip.accent}</span>
                       ) : (
                         <>
-                          <div style={{ fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-faint)" }}>{chip.weekday}</div>
+                          <div style={{ fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-subtle)" }}>{chip.weekday}</div>
                           <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{chip.dayNum}</div>
                         </>
                       )}
@@ -407,7 +407,7 @@ export default async function HomePage() {
                       <div style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.product.name}</div>
                       <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 1 }}>{CHANGELOG_LABEL[l.field] || l.field} actualizado</div>
                     </div>
-                    <span style={{ fontSize: "0.6875rem", color: "var(--color-faint)", flexShrink: 0, whiteSpace: "nowrap" }}>{relTime(l.createdAt)}</span>
+                    <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", flexShrink: 0, whiteSpace: "nowrap" }}>{relTime(l.createdAt)}</span>
                   </div>
                 </Link>
               ))}

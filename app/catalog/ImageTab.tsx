@@ -91,7 +91,7 @@ export default function ImageTab({
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
             <label style={lbl}>Imagen del producto (URL)</label>
-            <span style={{ fontSize: "0.75rem", color: "var(--color-faint)" }}>1:1</span>
+            <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>1:1</span>
           </div>
           <input className="input" value={productImageUrl} onChange={(e) => setProductImageUrl(e.target.value)} placeholder="https://…/producto.png" style={{ fontSize: "0.8125rem" }} />
         </div>
@@ -119,7 +119,7 @@ export default function ImageTab({
         ) : (
           <ImageComposer backgroundUrl={sel?.backgroundUrl} coverUrl={sel?.coverUrl} productUrl={layer} size={360} />
         )}
-        {!finalUrl && <p style={{ fontSize: "0.72rem", color: "var(--color-faint)", marginTop: 8 }}>Aproximada — la sombra real se ve en “Ver resultado final”.</p>}
+        {!finalUrl && <p style={{ fontSize: "0.72rem", color: "var(--color-subtle)", marginTop: 8 }}>Aproximada — la sombra real se ve en “Ver resultado final”.</p>}
       </div>
     </div>
   );

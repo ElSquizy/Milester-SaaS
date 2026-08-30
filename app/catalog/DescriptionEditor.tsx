@@ -121,7 +121,7 @@ function SlotField({ field, data, setScalar, setListItem, addRow, removeRow }: {
               {field.item.map((s) => s.type === "textarea"
                 ? <textarea key={s.key} className="input" value={row[s.key] || ""} onChange={(e) => setListItem(field.key, i, s.key, e.target.value)} placeholder={s.placeholder || s.label} rows={2} style={{ fontSize: "0.8125rem", resize: "vertical" }} />
                 : <input key={s.key} className="input" value={row[s.key] || ""} onChange={(e) => setListItem(field.key, i, s.key, e.target.value)} placeholder={s.placeholder || s.label} style={{ fontSize: "0.8125rem" }} />)}
-              <button type="button" onClick={() => removeRow(field.key, i)} title="Quitar" style={{ position: "absolute", top: 6, right: 6, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", fontSize: "0.875rem" }}>×</button>
+              <button type="button" onClick={() => removeRow(field.key, i)} title="Quitar" style={{ position: "absolute", top: 6, right: 6, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", fontSize: "0.875rem" }}>×</button>
             </div>
           ))}
           <button type="button" className="btn-secondary" onClick={() => addRow(field.key, blank)} style={{ fontSize: "0.75rem", padding: "5px 10px", alignSelf: "flex-start" }}>+ {field.addLabel || "Agregar"}</button>
@@ -138,7 +138,7 @@ function SlotField({ field, data, setScalar, setListItem, addRow, removeRow }: {
           <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input className="input" value={row.label || ""} onChange={(e) => setListItem(field.key, i, "label", e.target.value)} placeholder={field.labelPlaceholder} style={{ fontSize: "0.8125rem", width: "40%" }} />
             <input className="input" value={row.value || ""} onChange={(e) => setListItem(field.key, i, "value", e.target.value)} placeholder={field.valuePlaceholder} style={{ fontSize: "0.8125rem", flex: 1 }} />
-            <button type="button" onClick={() => removeRow(field.key, i)} title="Quitar" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", fontSize: "1rem", flexShrink: 0 }}>×</button>
+            <button type="button" onClick={() => removeRow(field.key, i)} title="Quitar" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", fontSize: "1rem", flexShrink: 0 }}>×</button>
           </div>
         ))}
         <button type="button" className="btn-secondary" onClick={() => addRow(field.key, { label: "", value: "" })} style={{ fontSize: "0.75rem", padding: "5px 10px", alignSelf: "flex-start" }}>+ {field.addLabel || "Agregar"}</button>

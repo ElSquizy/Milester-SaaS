@@ -64,7 +64,7 @@ export default function CalendarView({ onEditTask, refreshKey }: { onEditTask?: 
         <span style={{ fontSize: "1rem", fontWeight: 700, textTransform: "capitalize", minWidth: 150 }}>{format(month, "MMMM yyyy", { locale: es })}</span>
         <button onClick={() => setMonth(addMonths(month, 1))} style={navBtn}>›</button>
         <button onClick={() => setMonth(startOfMonth(new Date()))} className="btn-secondary" style={{ padding: "6px 12px", fontSize: "0.8125rem" }}>Hoy</button>
-        {loading && <span style={{ fontSize: "0.75rem", color: "var(--color-faint)" }}>cargando…</span>}
+        {loading && <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>cargando…</span>}
         <button className="btn-primary" onClick={() => setEventModal({ title: "", date: ymd(new Date()), type: "launch", note: "" })} style={{ marginLeft: "auto", padding: "7px 13px" }}>+ Evento</button>
       </div>
 

@@ -286,7 +286,7 @@ function ImageTemplateEditor({ template, busy, setBusy, onDelete, onSaved }: {
       </div>
       <div style={{ flex: 1, borderLeft: "1px solid var(--color-divider)", overflowY: "auto", padding: 20, background: "var(--color-surface-2)", minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-subtle)", textTransform: "uppercase", letterSpacing: "0.03em", marginBottom: 12, alignSelf: "flex-start" }}>
-          Vista previa {composing && <span style={{ color: "var(--color-faint)" }}>· componiendo…</span>}
+          Vista previa {composing && <span style={{ color: "var(--color-subtle)" }}>· componiendo…</span>}
         </div>
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element

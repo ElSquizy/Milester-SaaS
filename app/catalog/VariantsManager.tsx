@@ -118,7 +118,7 @@ export default function VariantsManager({ productId }: { productId: number }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: "0.75rem", fontWeight: 600, letterSpacing: "0.03em", textTransform: "uppercase", color: "var(--color-subtle)" }}>Variantes</div>
-          <div style={{ fontSize: "0.75rem", color: "var(--color-faint)", marginTop: 2 }}>Precio, stock (vacío = ∞) y SKU por variante. Se guardan en Tienda Nube al aplicar.</div>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 2 }}>Precio, stock (vacío = ∞) y SKU por variante. Se guardan en Tienda Nube al aplicar.</div>
         </div>
         <button className="btn-secondary" onClick={addRow} style={{ padding: "6px 12px", fontSize: "0.8125rem", whiteSpace: "nowrap" }}>+ Variante</button>
       </div>
@@ -130,7 +130,7 @@ export default function VariantsManager({ productId }: { productId: number }) {
           <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "var(--color-surface-2)", borderRadius: "var(--radius-pill)", padding: "2px 4px 2px 10px" }}>
             <input value={a} onChange={(e) => setAttr(i, e.target.value)} placeholder="Atributo"
               style={{ border: "none", background: "transparent", outline: "none", fontSize: "0.75rem", width: `${Math.max(6, a.length + 2)}ch`, color: "var(--color-ink)", fontWeight: 500 }} />
-            <button onClick={() => removeAttr(i)} title="Quitar atributo" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", fontSize: "0.875rem", lineHeight: 1 }}>×</button>
+            <button onClick={() => removeAttr(i)} title="Quitar atributo" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", fontSize: "0.875rem", lineHeight: 1 }}>×</button>
           </span>
         ))}
         <button onClick={addAttr} style={{ border: "1px dashed var(--color-border)", background: "transparent", borderRadius: "var(--radius-pill)", padding: "3px 10px", fontSize: "0.75rem", color: "var(--color-muted)", cursor: "pointer" }}>+ atributo</button>

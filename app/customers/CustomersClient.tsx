@@ -234,7 +234,7 @@ export default function CustomersClient({ customers, total, page, totalPages, cu
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
                     <div style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>${c.totalSpent.toLocaleString("es-AR")}</div>
                     <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", fontVariantNumeric: "tabular-nums" }}>{c.orderCount} {c.orderCount === 1 ? "compra" : "compras"}</div>
-                    {c.orderCount > 0 && <div style={{ fontSize: "0.6875rem", color: "var(--color-faint)" }}>{relDate(c.lastOrderAt)}</div>}
+                    {c.orderCount > 0 && <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)" }}>{relDate(c.lastOrderAt)}</div>}
                   </div>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-faint)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: open ? "none" : "rotate(-90deg)", transition: "transform 0.15s" }}><polyline points="6 9 12 15 18 9" /></svg>
                 </div>

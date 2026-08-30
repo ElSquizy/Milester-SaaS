@@ -193,15 +193,15 @@ function Row({ log, first }: { log: Log; first: boolean }) {
           <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{log.productName}</div>
           <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 1 }}>
             <span style={{ fontWeight: 600, color: "var(--color-muted)" }}>{f.label}</span>
-            <span style={{ color: "var(--color-faint)", textDecoration: "line-through" }}>{fmt(log.field, log.oldValue)}</span>
-            <span style={{ color: "var(--color-faint)" }}>→</span>
+            <span style={{ color: "var(--color-subtle)", textDecoration: "line-through" }}>{fmt(log.field, log.oldValue)}</span>
+            <span style={{ color: "var(--color-subtle)" }}>→</span>
             <span style={{ color: "var(--color-ink)", fontWeight: 500 }}>{fmt(log.field, log.newValue)}</span>
           </div>
         </div>
 
         {/* Meta */}
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
-          <span style={{ fontSize: "0.6875rem", color: "var(--color-faint)", whiteSpace: "nowrap" }}>{relTime(log.createdAt)}</span>
+          <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", whiteSpace: "nowrap" }}>{relTime(log.createdAt)}</span>
           {log.productSync === "modified" && (
             <span className="pill pill-warning" style={{ fontSize: "0.625rem", padding: "1px 7px" }}>sin sincronizar</span>
           )}

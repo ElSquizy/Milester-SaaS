@@ -132,7 +132,7 @@ function MessageEditor({ template, busy, setBusy, onDelete, onSaved }: {
         </div>
         {/* Burbuja tipo chat para que se vea como el mensaje que recibe el cliente */}
         <div style={{ background: "var(--color-surface)", borderRadius: 14, border: "1px solid var(--color-border)", padding: "12px 14px", fontSize: "0.875rem", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word", maxWidth: 420 }}>
-          {preview || <span style={{ color: "var(--color-faint)" }}>El mensaje aparecerá acá…</span>}
+          {preview || <span style={{ color: "var(--color-subtle)" }}>El mensaje aparecerá acá…</span>}
         </div>
         <p style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 12 }}>
           En el catálogo, clic derecho sobre un producto → «Copiar mensaje» reemplaza las variables con sus datos reales.

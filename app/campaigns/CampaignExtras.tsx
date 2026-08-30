@@ -33,7 +33,7 @@ export function ProductPicker({ picked, onChange }: { picked: PickedProduct[]; o
           {picked.map((p) => (
             <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: "var(--radius-pill)", background: "var(--color-surface-2)", fontSize: "0.75rem", color: "var(--color-ink)", fontWeight: 500 }}>
               {p.name.slice(0, 28)}
-              <button onClick={() => onChange(picked.filter((x) => x.id !== p.id))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", padding: 0, fontSize: "1rem", lineHeight: 1 }}>×</button>
+              <button onClick={() => onChange(picked.filter((x) => x.id !== p.id))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", padding: 0, fontSize: "1rem", lineHeight: 1 }}>×</button>
             </span>
           ))}
         </div>
@@ -306,7 +306,7 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
                     <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.03em", color: "var(--color-brand)" }}>
                       Costo USD promo
                       <div style={{ position: "relative", width: 90 }}>
-                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-faint)", pointerEvents: "none" }}>US$</span>
+                        <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: "0.6875rem", color: "var(--color-subtle)", pointerEvents: "none" }}>US$</span>
                         <input className="input" inputMode="decimal" value={raw} placeholder="0" onChange={(e) => setCost(it.productId, e.target.value)}
                           style={{ paddingLeft: 30, padding: "6px 8px 6px 30px", fontSize: "0.8125rem", fontWeight: 600, fontVariantNumeric: "tabular-nums" }} />
                       </div>
@@ -317,7 +317,7 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
                         {derived != null ? `$${derived.toLocaleString("es-AR")}` : "—"}
                       </div>
                     </div>
-                    <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
+                    <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", flexShrink: 0, padding: 4 }}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     </button>
                   </div>
@@ -345,7 +345,7 @@ export function ItemsPanel({ campaignId, status, mode, categories, categoryTree,
                       <input className="input" value={it.promoPrice} disabled={isCosts} onChange={(e) => setPromo(it.productId, e.target.value)} style={{ paddingLeft: 20, fontVariantNumeric: "tabular-nums", fontWeight: 600, padding: "7px 10px 7px 20px", opacity: isCosts ? 0.7 : 1 }} />
                     </div>
                   )}
-                  {!isCosts && <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-faint)", flexShrink: 0, padding: 4 }}>
+                  {!isCosts && <button onClick={() => removeItem(it.productId)} title="Quitar de la campaña" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", flexShrink: 0, padding: 4 }}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>}
                 </div>
