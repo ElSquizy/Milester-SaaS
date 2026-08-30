@@ -15,12 +15,19 @@ const EVENT_STYLE: Record<string, { color: string; label: string }> = {
   note: { color: "var(--color-subtle)", label: "Nota" },
   holiday: { color: "var(--color-danger)", label: "Feriado" },
 };
-function eventDateLabel(day: string, todayAr: string): string {
+/** Partes del mini-chip de fecha: "Hoy"/"Mañana" como destacado, o día + abrev. de día de semana. */
+function dateChip(day: string, todayAr: string): { accent: string | null; weekday: string; dayNum: string } {
   const tomorrow = new Date(`${todayAr}T12:00:00`); tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-  if (day === todayAr) return "Hoy";
-  if (day === tomorrowStr) return "Mañana";
-  return new Date(`${day}T12:00:00`).toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" });
+  if (day === todayAr) return { accent: "Hoy", weekday: "", dayNum: "" };
+  if (day === tomorrowStr) return { accent: "Mañana", weekday: "", dayNum: "" };
+  const d = new Date(`${day}T12:00:00`);
+  return { accent: null, weekday: d.toLocaleDateString("es-AR", { weekday: "short" }).replace(".", ""), dayNum: String(d.getDate()) };
+}
+/** Iniciales para el monograma del empleado. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
 }
 
 const widgetH2: React.CSSProperties = { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: 0 };
@@ -286,20 +293,23 @@ export default async function HomePage() {
           {/* Hoy en la tienda */}
           <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <h2 style={widgetH2}>Hoy en la tienda</h2>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                <h2 style={widgetH2}>Hoy en la tienda</h2>
+                {todayShifts.length > 0 && <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-faint)", fontVariantNumeric: "tabular-nums" }}>{todayShifts.length} en turno</span>}
+              </div>
               <Link href="/agenda" style={widgetLink}>Horarios →</Link>
             </div>
             <div className="card-float" style={{ overflow: "hidden", minHeight: 96 }}>
               {todayShifts.length === 0 ? (
-                <div style={{ padding: "28px 18px", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Nadie tiene turno hoy.</div>
+                <div style={{ padding: "30px 18px", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Nadie tiene turno hoy.</div>
               ) : todayShifts.map((s, i) => (
-                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "12px 16px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
-                  <span style={{ width: 9, height: 9, borderRadius: "50%", flexShrink: 0, background: s.employee.color }} />
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
+                  <span style={{ width: 30, height: 30, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: `color-mix(in srgb, ${s.employee.color} 16%, var(--color-surface))`, color: s.employee.color, fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.01em" }}>{initials(s.employee.name)}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.employee.name}</div>
-                    {s.note && <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>{s.note}</div>}
+                    <div style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.employee.name}</div>
+                    {s.note && <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.note}</div>}
                   </div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{s.start}–{s.end}</span>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", flexShrink: 0, fontVariantNumeric: "tabular-nums", padding: "3px 8px", borderRadius: "var(--radius-pill)", background: "var(--color-surface-2)" }}>{s.start}–{s.end}</span>
                 </div>
               ))}
             </div>
@@ -316,14 +326,24 @@ export default async function HomePage() {
                 <div style={{ padding: "28px 18px", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>No hay eventos en los próximos 30 días.</div>
               ) : upcomingEvents.map((e, i) => {
                 const st = EVENT_STYLE[e.type] ?? EVENT_STYLE.note;
+                const chip = dateChip(e.day, todayAr);
                 return (
-                  <div key={`${e.type}-${e.day}-${i}`} style={{ display: "flex", alignItems: "center", gap: 11, padding: "11px 16px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: st.color }} />
+                  <div key={`${e.type}-${e.day}-${i}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none" }}>
+                    <div style={{ width: 40, flexShrink: 0, textAlign: "center", lineHeight: 1 }}>
+                      {chip.accent ? (
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-brand)" }}>{chip.accent}</span>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: "0.5625rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-faint)" }}>{chip.weekday}</div>
+                          <div style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-ink)", fontVariantNumeric: "tabular-nums", marginTop: 2 }}>{chip.dayNum}</div>
+                        </>
+                      )}
+                    </div>
+                    <span style={{ width: 1, alignSelf: "stretch", flexShrink: 0, background: "var(--color-divider)" }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.title}</div>
-                      <div style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", marginTop: 1 }}>{st.label}</div>
+                      <div style={{ fontSize: "0.6875rem", fontWeight: 600, color: st.color, marginTop: 2 }}>{st.label}</div>
                     </div>
-                    <span style={{ fontSize: "0.75rem", color: "var(--color-muted)", flexShrink: 0, whiteSpace: "nowrap", textTransform: "capitalize" }}>{eventDateLabel(e.day, todayAr)}</span>
                   </div>
                 );
               })}
