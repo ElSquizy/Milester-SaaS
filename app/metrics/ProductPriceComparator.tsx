@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
-import { fieldBreakpoints, unifiedRows, type Change } from "@/lib/priceSeries";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { fieldBreakpoints, windowPoints, unifiedSparse, paddedDomain, type Change } from "@/lib/priceSeries";
 
 type Prod = { id: number; name: string };
 
@@ -12,8 +12,10 @@ const FIELDS = [
   { key: "costUsdPromo", label: "Costo promo USD", unit: "usd" as const },
 ];
 const FIELD_KEYS = FIELDS.map((f) => f.key);
+const RANGES = [{ k: "1w", label: "1 sem", days: 7 }, { k: "1m", label: "1 mes", days: 30 }, { k: "3m", label: "3 meses", days: 90 }, { k: "1y", label: "1 año", days: 365 }, { k: "all", label: "Todo", days: 0 }];
 const COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-success)", "var(--color-danger)", "var(--color-info)"];
 const MAX = 6;
+const DAY = 86400000;
 
 const fmtDate = (t: number) => new Date(t).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 const arsShort = (n: number) => (Math.abs(n) >= 1000 ? `$${Math.round(n / 1000)}k` : `$${Math.round(n)}`);
@@ -23,6 +25,7 @@ export default function ProductPriceComparator() {
   const [selected, setSelected] = useState<Prod[]>([]);
   const [hist, setHist] = useState<Record<number, Change[]>>({});
   const [fieldKey, setFieldKey] = useState("promotionalPrice");
+  const [range, setRange] = useState("3m");
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Prod[]>([]);
   const [openList, setOpenList] = useState(false);
@@ -30,7 +33,6 @@ export default function ProductPriceComparator() {
 
   const field = FIELDS.find((f) => f.key === fieldKey)!;
 
-  // Cerrar el dropdown al hacer clic afuera o con Escape.
   useEffect(() => {
     if (!openList) return;
     const onDown = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setOpenList(false); };
@@ -40,7 +42,6 @@ export default function ProductPriceComparator() {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [openList]);
 
-  // Búsqueda de productos (debounce).
   useEffect(() => {
     const t = setTimeout(() => {
       if (!q.trim()) { setResults([]); return; }
@@ -51,7 +52,6 @@ export default function ProductPriceComparator() {
     return () => clearTimeout(t);
   }, [q]);
 
-  // Trae el changelog de los productos recién agregados.
   useEffect(() => {
     const missing = selected.filter((p) => !(p.id in hist));
     if (!missing.length) return;
@@ -68,17 +68,26 @@ export default function ProductPriceComparator() {
   }
   const remove = (id: number) => setSelected((s) => s.filter((p) => p.id !== id));
 
-  // Reconstruye la serie del campo elegido para cada producto (escalonada), cada
-  // uno con su propia historia — sin backdating entre productos.
-  const { rows, series } = useMemo(() => {
-    const sets = selected.map((p) => ({ key: `p${p.id}`, bps: fieldBreakpoints((hist[p.id] || []).filter((c) => c.field === fieldKey)) }));
-    const bpCount = new Map(sets.map((s) => [s.key, s.bps.length]));
-    const rows = unifiedRows(sets);
-    const series = selected.map((p, i) => ({ ...p, color: COLORS[i % COLORS.length], hasData: (bpCount.get(`p${p.id}`) ?? 0) > 0 }));
-    return { rows, series };
-  }, [selected, hist, fieldKey]);
+  const { rows, series, xDomain, domain, anyInWindow } = useMemo(() => {
+    const now = Date.now();
+    const days = RANGES.find((r) => r.k === range)?.days ?? 90;
+    const from = days ? now - days * DAY : -Infinity;
 
-  const anyData = series.some((s) => s.hasData);
+    const sets = selected.map((p, i) => {
+      const bps = fieldBreakpoints((hist[p.id] || []).filter((c) => c.field === fieldKey));
+      return { ...p, color: COLORS[i % COLORS.length], bps, pts: windowPoints(bps, from, now), hasData: bps.length > 0 };
+    });
+    const drawn = sets.filter((s) => s.pts.length > 0);
+    const rows = unifiedSparse(drawn.map((s) => ({ key: `p${s.id}`, pts: s.pts })));
+    const vals = drawn.flatMap((s) => s.pts.map((pt) => pt.v!));
+    return {
+      rows,
+      series: sets,
+      xDomain: (days ? [from, now] : ["dataMin", "dataMax"]) as [number | string, number | string],
+      domain: paddedDomain(vals),
+      anyInWindow: drawn.length > 0,
+    };
+  }, [selected, hist, fieldKey, range]);
 
   return (
     <div className="anim-up delay-3" style={{ marginTop: 40 }}>
@@ -86,16 +95,28 @@ export default function ProductPriceComparator() {
       <p style={{ fontSize: "0.8125rem", color: "var(--color-subtle)", margin: "0 0 16px" }}>Elegí productos y un tipo de precio para ver su evolución lado a lado.</p>
 
       <div className="card" style={{ padding: "18px 20px" }}>
-        {/* Selector de campo */}
-        <div style={{ display: "flex", gap: 4, background: "var(--color-surface-2)", padding: 3, borderRadius: "var(--radius-pill)", marginBottom: 14, width: "fit-content", flexWrap: "wrap" }}>
-          {FIELDS.map((f) => (
-            <button key={f.key} onClick={() => setFieldKey(f.key)} aria-pressed={fieldKey === f.key}
-              style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, border: "none",
-                background: fieldKey === f.key ? "var(--color-surface)" : "transparent", color: fieldKey === f.key ? "var(--color-ink)" : "var(--color-subtle)",
-                boxShadow: fieldKey === f.key ? "var(--shadow-card)" : "none" }}>
-              {f.label}
-            </button>
-          ))}
+        {/* Tipo de precio + rango */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 4, background: "var(--color-surface-2)", padding: 3, borderRadius: "var(--radius-pill)", flexWrap: "wrap" }}>
+            {FIELDS.map((f) => (
+              <button key={f.key} onClick={() => setFieldKey(f.key)} aria-pressed={fieldKey === f.key}
+                style={{ padding: "5px 12px", borderRadius: "var(--radius-pill)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, border: "none",
+                  background: fieldKey === f.key ? "var(--color-surface)" : "transparent", color: fieldKey === f.key ? "var(--color-ink)" : "var(--color-subtle)",
+                  boxShadow: fieldKey === f.key ? "var(--shadow-card)" : "none" }}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 3, background: "var(--color-surface-2)", padding: 3, borderRadius: "var(--radius-pill)", marginLeft: "auto" }}>
+            {RANGES.map((r) => (
+              <button key={r.k} onClick={() => setRange(r.k)} aria-pressed={range === r.k}
+                style={{ padding: "5px 10px", borderRadius: "var(--radius-pill)", cursor: "pointer", fontSize: "0.6875rem", fontWeight: 600, border: "none",
+                  background: range === r.k ? "var(--color-surface)" : "transparent", color: range === r.k ? "var(--color-ink)" : "var(--color-subtle)",
+                  boxShadow: range === r.k ? "var(--shadow-card)" : "none" }}>
+                {r.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Buscador + chips */}
@@ -132,31 +153,21 @@ export default function ProductPriceComparator() {
         <div style={{ marginTop: 16 }}>
           {selected.length === 0 ? (
             <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Agregá productos para comparar sus precios.</div>
-          ) : !anyData ? (
-            <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)", padding: "0 20px" }}>Ninguno de los productos tiene historial de {field.label.toLowerCase()} todavía.</div>
+          ) : !anyInWindow ? (
+            <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)", padding: "0 20px" }}>Ningún producto tiene historial de {field.label.toLowerCase()} en este rango.</div>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={rows} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
-                <defs>
-                  {series.map((p) => (
-                    <linearGradient key={p.id} id={`cmp-p${p.id}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={p.color} stopOpacity={0.2} />
-                      <stop offset="100%" stopColor={p.color} stopOpacity={0.01} />
-                    </linearGradient>
-                  ))}
-                </defs>
+              <LineChart data={rows} margin={{ top: 10, right: 8, left: 4, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" vertical={false} />
-                <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmtDate}
+                <XAxis dataKey="t" type="number" scale="time" domain={xDomain} tickFormatter={fmtDate}
                   tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={{ stroke: "var(--color-border)" }} minTickGap={28} />
-                <YAxis tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={false} width={46}
+                <YAxis domain={domain} tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={false} width={46}
                   tickFormatter={(v) => (field.unit === "usd" ? `US$${v}` : arsShort(v))} />
                 <Tooltip content={<CmpTooltip series={series} unit={field.unit} />} cursor={{ stroke: "var(--color-faint)", strokeWidth: 1 }} />
-                {(() => { const drawn = series.filter((s) => s.hasData); return drawn.map((p) => (
-                  <Area key={p.id} type="stepAfter" dataKey={`p${p.id}`} name={p.name} stroke={p.color} strokeWidth={2}
-                    fill={drawn.length === 1 ? `url(#cmp-p${p.id})` : "none"}
-                    dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
-                )); })()}
-              </AreaChart>
+                {series.filter((s) => s.pts.length > 0).map((p) => (
+                  <Line key={p.id} type="monotone" dataKey={`p${p.id}`} name={p.name} stroke={p.color} strokeWidth={2} dot={{ r: 2.5, fill: p.color, strokeWidth: 0 }} activeDot={{ r: 4 }} connectNulls isAnimationActive={false} />
+                ))}
+              </LineChart>
             </ResponsiveContainer>
           )}
         </div>

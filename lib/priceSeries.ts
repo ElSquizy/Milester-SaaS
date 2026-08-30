@@ -42,15 +42,41 @@ export function valueAt(bps: BP[], t: number): number | null {
 }
 
 /**
- * Filas para Recharts sobre un eje temporal unificado (unión de todos los
- * timestamps). Cada serie aporta su valor vigente en cada tiempo, o null antes
- * de su primer dato / tras un limpiado (la línea corta con connectNulls=false).
+ * Puntos de una serie DENTRO de una ventana [from, to], para una línea suave:
+ * un punto de "entrada" con el precio vigente al inicio de la ventana (aunque el
+ * último cambio haya sido antes), los cambios reales dentro de la ventana, y el
+ * valor actual al final. Solo puntos reales (sin escalones), para interpolar.
  */
-export function unifiedRows(sets: { key: string; bps: BP[] }[]): Record<string, number | null>[] {
-  const times = [...new Set(sets.flatMap((s) => s.bps.map((b) => b.t)))].sort((a, b) => a - b);
+export function windowPoints(bps: BP[], from: number, to: number): BP[] {
+  const pts: BP[] = [];
+  const vFrom = valueAt(bps, from);
+  if (vFrom != null) pts.push({ t: from, v: vFrom });
+  for (const b of bps) if (b.t > from && b.t < to && b.v != null) pts.push({ t: b.t, v: b.v });
+  const vTo = valueAt(bps, to);
+  if (vTo != null) pts.push({ t: to, v: vTo });
+  return pts;
+}
+
+/**
+ * Filas para Recharts a partir de conjuntos de puntos dispersos: cada serie
+ * aporta su valor solo en los timestamps donde tiene un punto; en el resto va
+ * null y la curva lo puentea (connectNulls) para verse suave.
+ */
+export function unifiedSparse(sets: { key: string; pts: BP[] }[]): Record<string, number | null>[] {
+  const times = [...new Set(sets.flatMap((s) => s.pts.map((p) => p.t)))].sort((a, b) => a - b);
+  const maps = sets.map((s) => [s.key, new Map(s.pts.map((p) => [p.t, p.v] as const))] as const);
   return times.map((t) => {
     const row: Record<string, number | null> = { t };
-    for (const s of sets) row[s.key] = valueAt(s.bps, t);
+    for (const [key, m] of maps) row[key] = m.has(t) ? m.get(t)! : null;
     return row;
   });
+}
+
+/** Dominio [min, max] con ~12% de aire arriba y abajo, para que la línea no se corte. */
+export function paddedDomain(values: number[]): [number, number] | undefined {
+  if (!values.length) return undefined;
+  const min = Math.min(...values), max = Math.max(...values);
+  if (min === max) { const p = Math.abs(min) * 0.1 || 1; return [Math.max(0, min - p), max + p]; }
+  const pad = (max - min) * 0.12;
+  return [Math.max(0, min - pad), max + pad];
 }
