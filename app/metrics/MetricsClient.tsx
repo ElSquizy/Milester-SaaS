@@ -7,6 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from "recharts";
 import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint, type TopProduct, type SourceSlice, type Totals, type Projection, type Insights, type Breakdowns, type BucketRow, type HeatCell, type FunnelData, type CampaignEffect } from "@/lib/metrics";
+import ProductPriceComparator from "./ProductPriceComparator";
 
 // Paleta para el desglose por canal — el resto del sistema es mono-brand.
 const BRAND = "var(--color-brand)";
@@ -273,6 +274,9 @@ export default function MetricsClient({
             <FunnelSection funnel={funnel} />
           </>
         )}
+
+        {/* Comparador de precios entre productos (independiente del rango) */}
+        <ProductPriceComparator />
 
         {/* Efectividad de campañas (Fase 4) — independiente del rango */}
         <CampaignEffectSection effects={campaignEffects} />
