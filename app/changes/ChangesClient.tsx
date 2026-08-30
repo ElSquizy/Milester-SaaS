@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import Modal from "@/components/Modal";
 
 type Log = {
   id: number;
@@ -75,6 +76,7 @@ export default function ChangesClient() {
   const [sync, setSync] = useState("");   // "" | "pending"
   const [q, setQ] = useState("");         // búsqueda por producto
   const [dq, setDq] = useState("");       // q con debounce
+  const [history, setHistory] = useState<{ id: number; name: string } | null>(null); // modal de historial por producto
   useEffect(() => { const t = setTimeout(() => setDq(q.trim()), 300); return () => clearTimeout(t); }, [q]);
 
   const filtered = !!(field || sync || dq);
@@ -183,7 +185,7 @@ export default function ChangesClient() {
               <div key={g.day}>
                 <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-subtle)", marginBottom: 10 }}>{g.day}</div>
                 <div className="card-float" style={{ overflow: "hidden", padding: 0 }}>
-                  {g.items.map((l, i) => <Row key={l.id} log={l} first={i === 0} />)}
+                  {g.items.map((l, i) => <Row key={l.id} log={l} first={i === 0} onOpen={() => setHistory({ id: l.productId, name: l.productName })} />)}
                 </div>
               </div>
             ))}
@@ -197,14 +199,16 @@ export default function ChangesClient() {
           </div>
         )}
       </div>
+
+      {history && <ProductHistoryModal productId={history.id} productName={history.name} onClose={() => setHistory(null)} />}
     </div>
   );
 }
 
-function Row({ log, first }: { log: Log; first: boolean }) {
+function Row({ log, first, onOpen }: { log: Log; first: boolean; onOpen: () => void }) {
   const f = FIELD[log.field] || { label: log.field, color: "var(--color-muted)", bg: "var(--color-surface-2)", icon: <circle cx="12" cy="12" r="9" /> };
   return (
-    <Link href={`/catalog?edit=${log.productId}`} style={{ textDecoration: "none" }}>
+    <button onClick={onOpen} className="product-row-link" style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: 0, font: "inherit", color: "inherit" }}>
       <div style={{
         display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
         borderTop: first ? "none" : "1px solid var(--color-divider)",
@@ -250,6 +254,75 @@ function Row({ log, first }: { log: Log; first: boolean }) {
           )}
         </div>
       </div>
-    </Link>
+    </button>
+  );
+}
+
+function ProductHistoryModal({ productId, productName, onClose }: { productId: number; productName: string; onClose: () => void }) {
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    fetch(`/api/changelog?productId=${productId}`).then((r) => r.json())
+      .then((d) => { if (alive) setLogs(d.logs || []); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [productId]);
+
+  // Agrupar por día, preservando orden por recencia.
+  const groups: { day: string; items: Log[] }[] = [];
+  for (const l of logs) {
+    const day = dayLabel(l.createdAt);
+    const g = groups[groups.length - 1];
+    if (g && g.day === day) g.items.push(l); else groups.push({ day, items: [l] });
+  }
+
+  return (
+    <Modal title="Historial del producto" onClose={onClose} maxWidth={520}>
+      <div style={{ marginTop: -4, marginBottom: 16 }}>
+        <div style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-ink)", lineHeight: 1.3 }}>{productName}</div>
+        <Link href={`/catalog?edit=${productId}`} style={{ fontSize: "0.8125rem", color: "var(--color-brand)", fontWeight: 600, textDecoration: "none" }}>Abrir en catálogo →</Link>
+      </div>
+      {loading ? (
+        <div style={{ padding: "32px", textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Cargando historial…</div>
+      ) : logs.length === 0 ? (
+        <div style={{ padding: "32px", textAlign: "center", color: "var(--color-subtle)", fontSize: "0.875rem" }}>Este producto no tiene cambios registrados.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {groups.map((g) => (
+            <div key={g.day}>
+              <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-subtle)", marginBottom: 6 }}>{g.day}</div>
+              <div style={{ display: "flex", flexDirection: "column" }}>
+                {g.items.map((l, i) => <HistoryRow key={l.id} log={l} first={i === 0} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/** Fila compacta del historial: sin nombre/miniatura de producto (ya está en el encabezado). */
+function HistoryRow({ log, first }: { log: Log; first: boolean }) {
+  const f = FIELD[log.field] || { label: log.field, color: "var(--color-muted)", bg: "var(--color-surface-2)", icon: <circle cx="12" cy="12" r="9" /> };
+  const d = priceDelta(log.field, log.oldValue, log.newValue);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: first ? "none" : "1px solid var(--color-divider)" }}>
+      <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: f.bg, color: f.color }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{f.icon}</svg>
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", marginBottom: 1 }}>{f.label}</div>
+        <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ textDecoration: "line-through" }}>{fmt(log.field, log.oldValue)}</span>
+          <span>→</span>
+          <span style={{ color: "var(--color-ink)", fontWeight: 500 }}>{fmt(log.field, log.newValue)}</span>
+          {d && <span style={{ fontWeight: 700, color: "var(--color-muted)", fontVariantNumeric: "tabular-nums" }}>{d.up ? "▲" : "▼"} {Math.abs(d.pct)}%</span>}
+        </div>
+      </div>
+      <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", whiteSpace: "nowrap", flexShrink: 0 }}>{relTime(log.createdAt)}</span>
+    </div>
   );
 }

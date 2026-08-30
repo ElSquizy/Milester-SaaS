@@ -19,12 +19,14 @@ export async function GET(req: Request) {
   const field = url.searchParams.get("field");   // tipo de cambio exacto
   const q = url.searchParams.get("q");            // nombre de producto contiene
   const sync = url.searchParams.get("sync");      // "pending" = productos sin sincronizar
+  const productId = url.searchParams.get("productId"); // historial de un producto
 
   // Filtros combinables (fecha/cursor + tipo + búsqueda + estado de sync).
   const and: Prisma.ChangelogWhereInput[] = [];
   const dayMode = !!(from && to);
   let take = PAGE;
-  if (dayMode) { and.push({ createdAt: { gte: new Date(from!), lt: new Date(to!) } }); take = 2000; }
+  if (productId) { and.push({ productId: Number(productId) }); take = 200; } // historial completo del producto
+  else if (dayMode) { and.push({ createdAt: { gte: new Date(from!), lt: new Date(to!) } }); take = 2000; }
   else if (before) { and.push({ id: { lt: Number(before) } }); }
   if (field) and.push({ field });
   if (q && q.trim()) and.push({ product: { name: { contains: q.trim() } } });

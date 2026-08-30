@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, format, isSameMonth, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import Modal from "./Modal";
+import Modal from "@/components/Modal";
 
 // Cada evento del calendario trae su `day` (YYYY-MM-DD) y un `type`.
 type CalEvent = {

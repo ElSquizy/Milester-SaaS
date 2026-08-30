@@ -2,9 +2,8 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Modal accesible compartido por la sección Agenda (tareas, equipo, eventos,
- * turnos). Centraliza: cierre por Escape, role="dialog"/aria-modal, foco movido
- * al diálogo al abrir (respetando un autoFocus interno), trampa de Tab y
+ * Modal accesible compartido: cierre por Escape, role="dialog"/aria-modal, foco
+ * movido al diálogo al abrir (respetando un autoFocus interno), trampa de Tab y
  * restauración del foco al cerrar.
  */
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';

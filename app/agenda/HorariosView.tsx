@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, format, isToday } from "date-fns";
 import { es } from "date-fns/locale";
-import Modal from "./Modal";
+import Modal from "@/components/Modal";
 
 type Emp = { id: number; name: string; color: string };
 type Shift = { id: number; employeeId: number; start: string; end: string; note: string | null; day: string; employee: { id: number; name: string; color: string } };

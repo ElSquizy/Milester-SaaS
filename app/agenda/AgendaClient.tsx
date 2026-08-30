@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import CalendarView from "./CalendarView";
 import HorariosView from "./HorariosView";
-import Modal from "./Modal";
+import Modal from "@/components/Modal";
 
 type Employee = { id: number; name: string; role: string | null; color: string; active: boolean; openTasks: number };
 type Assignee = { id: number; name: string; color: string } | null;
