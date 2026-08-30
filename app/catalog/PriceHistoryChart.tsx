@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fieldBreakpoints, unifiedRows, type Change } from "@/lib/priceSeries";
 
 type Current = { price: number; promotionalPrice: number | null; costUsd: number | null; costUsdPromo: number | null };
@@ -81,19 +81,28 @@ export default function PriceHistoryChart({ productId, current }: { productId: n
       ) : activeSeries.length === 0 ? (
         <div style={{ height: 120, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8125rem", color: "var(--color-subtle)" }}>Elegí al menos un precio para ver su evolución.</div>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={rows} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={240}>
+          <AreaChart data={rows} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
+            <defs>
+              {activeSeries.map((s) => (
+                <linearGradient key={s.key} id={`phc-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={s.color} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={s.color} stopOpacity={0.01} />
+                </linearGradient>
+              ))}
+            </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" vertical={false} />
             <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]}
               tickFormatter={fmtDate} tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={{ stroke: "var(--color-border)" }} minTickGap={28} />
             {useArs && <YAxis yAxisId="ars" tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={false} width={46} tickFormatter={arsShort} />}
             {useUsd && <YAxis yAxisId="usd" orientation="right" tick={{ fontSize: 11, fill: "var(--color-chart-2)" }} tickLine={false} axisLine={false} width={40} tickFormatter={(v) => `US$${v}`} />}
-            <Tooltip content={<PriceTooltip />} />
+            <Tooltip content={<PriceTooltip />} cursor={{ stroke: "var(--color-faint)", strokeWidth: 1 }} />
             {activeSeries.map((s) => (
-              <Line key={s.key} yAxisId={s.unit} type="stepAfter" dataKey={s.key} name={s.label}
-                stroke={s.color} strokeWidth={2} dot={{ r: 2, fill: s.color }} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
+              <Area key={s.key} yAxisId={s.unit} type="stepAfter" dataKey={s.key} name={s.label}
+                stroke={s.color} strokeWidth={2} fill={activeSeries.length === 1 ? `url(#phc-${s.key})` : "none"}
+                dot={{ r: 2, fill: s.color }} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
             ))}
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       )}
     </div>

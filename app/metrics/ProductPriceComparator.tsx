@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
 import { fieldBreakpoints, unifiedRows, type Change } from "@/lib/priceSeries";
 
 type Prod = { id: number; name: string };
@@ -135,18 +135,28 @@ export default function ProductPriceComparator() {
           ) : !anyData ? (
             <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", fontSize: "0.8125rem", color: "var(--color-subtle)", padding: "0 20px" }}>Ninguno de los productos tiene historial de {field.label.toLowerCase()} todavía.</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={rows} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={rows} margin={{ top: 6, right: 8, left: 4, bottom: 0 }}>
+                <defs>
+                  {series.map((p) => (
+                    <linearGradient key={p.id} id={`cmp-p${p.id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={p.color} stopOpacity={0.2} />
+                      <stop offset="100%" stopColor={p.color} stopOpacity={0.01} />
+                    </linearGradient>
+                  ))}
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-divider)" vertical={false} />
                 <XAxis dataKey="t" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={fmtDate}
                   tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={{ stroke: "var(--color-border)" }} minTickGap={28} />
                 <YAxis tick={{ fontSize: 11, fill: "var(--color-subtle)" }} tickLine={false} axisLine={false} width={46}
                   tickFormatter={(v) => (field.unit === "usd" ? `US$${v}` : arsShort(v))} />
-                <Tooltip content={<CmpTooltip series={series} unit={field.unit} />} />
-                {series.filter((s) => s.hasData).map((p) => (
-                  <Line key={p.id} type="stepAfter" dataKey={`p${p.id}`} name={p.name} stroke={p.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
-                ))}
-              </LineChart>
+                <Tooltip content={<CmpTooltip series={series} unit={field.unit} />} cursor={{ stroke: "var(--color-faint)", strokeWidth: 1 }} />
+                {(() => { const drawn = series.filter((s) => s.hasData); return drawn.map((p) => (
+                  <Area key={p.id} type="stepAfter" dataKey={`p${p.id}`} name={p.name} stroke={p.color} strokeWidth={2}
+                    fill={drawn.length === 1 ? `url(#cmp-p${p.id})` : "none"}
+                    dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
+                )); })()}
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
