@@ -14,9 +14,9 @@ type CalEvent = {
 
 const TYPE: Record<CalEvent["type"], { color: string; label: string }> = {
   "task": { color: "var(--color-success)", label: "Tarea" },
-  "campaign-end": { color: "#EA580C", label: "Fin de oferta" },
+  "campaign-end": { color: "var(--color-chart-3)", label: "Fin de oferta" },
   "campaign-start": { color: "var(--color-info)", label: "Arranca campaña" },
-  "launch": { color: "#8B5CF6", label: "Lanzamiento" },
+  "launch": { color: "var(--color-chart-2)", label: "Lanzamiento" },
   "note": { color: "var(--color-subtle)", label: "Nota" },
   "holiday": { color: "var(--color-danger)", label: "Feriado" },
 };

@@ -222,7 +222,7 @@ function ListView({ tasks, onToggleDone, onEdit }: { tasks: Task[]; onToggleDone
 function BoardView({ tasks, onMove, onEdit }: { tasks: Task[]; onMove: (id: number, status: string) => void; onEdit: (t: Task) => void }) {
   const [over, setOver] = useState<string | null>(null);
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(240px, 1fr))", gap: 14, maxWidth: 1100, margin: "0 auto" }}>
+    <div className="kanban-board">
       {STATUSES.map((s) => {
         const col = tasks.filter((t) => t.status === s.v);
         return (

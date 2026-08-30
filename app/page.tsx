@@ -9,9 +9,9 @@ export const dynamic = "force-dynamic";
 
 const EVENT_STYLE: Record<string, { color: string; label: string }> = {
   task: { color: "var(--color-success)", label: "Tarea" },
-  "campaign-end": { color: "#EA580C", label: "Fin de oferta" },
+  "campaign-end": { color: "var(--color-chart-3)", label: "Fin de oferta" },
   "campaign-start": { color: "var(--color-brand)", label: "Campaña" },
-  launch: { color: "#8B5CF6", label: "Lanzamiento" },
+  launch: { color: "var(--color-chart-2)", label: "Lanzamiento" },
   note: { color: "var(--color-subtle)", label: "Nota" },
   holiday: { color: "var(--color-danger)", label: "Feriado" },
 };

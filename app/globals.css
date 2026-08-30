@@ -13,7 +13,8 @@
   /* Data-viz — series primaria/secundaria para gráficos de 2 categorías
      (canal, plataforma PS5/PS4, tipo primaria/secundaria). */
   --color-chart-1: var(--color-brand);   /* azul */
-  --color-chart-2: #8B5CF6;              /* violeta */
+  --color-chart-2: #8B5CF6;              /* violeta — lanzamientos */
+  --color-chart-3: #EA580C;              /* naranja — fin de oferta */
 
   /* Surfaces — warm very-light gray, never pure white */
   --color-bg:          #F9FAFB;
@@ -420,6 +421,20 @@ select.input { cursor: pointer; }
 }
 @media (max-width: 767px) {
   .page-scroll { padding: 24px 16px 64px; }
+}
+
+/* ── Tablero kanban ───────────────────────────────
+   3 columnas en escritorio; apiladas en 1 columna en mobile para no
+   desbordar en horizontal. */
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  gap: 14px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+@media (max-width: 767px) {
+  .kanban-board { grid-template-columns: 1fr; }
 }
 
 /* ── Catalog responsive ──────────────────────── */
