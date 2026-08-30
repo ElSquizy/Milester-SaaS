@@ -49,9 +49,9 @@ export async function upsertTnProducts(
 ): Promise<UpsertResult> {
   const existing = await prisma.product.findMany({
     where: { tiendaNubeId: { not: null } },
-    select: { id: true, tiendaNubeId: true, syncStatus: true, stock: true, name: true, price: true },
+    select: { id: true, tiendaNubeId: true, syncStatus: true, stock: true, name: true, price: true, promotionalPrice: true },
   });
-  const existingMap = new Map(existing.map((p) => [p.tiendaNubeId!, { id: p.id, syncStatus: p.syncStatus, stock: p.stock, name: p.name, price: p.price }]));
+  const existingMap = new Map(existing.map((p) => [p.tiendaNubeId!, { id: p.id, syncStatus: p.syncStatus, stock: p.stock, name: p.name, price: p.price, promotionalPrice: p.promotionalPrice }]));
 
   const res: UpsertResult = { created: 0, updated: 0, skipped: 0 };
 
@@ -79,6 +79,8 @@ export async function upsertTnProducts(
       if (match.stock !== stock) incoming.push({ field: "stock", oldValue: match.stock == null ? null : String(match.stock), newValue: stock == null ? null : String(stock) });
       if (match.name !== newName) incoming.push({ field: "name", oldValue: match.name, newValue: newName });
       if (match.price !== price) incoming.push({ field: "price", oldValue: String(match.price), newValue: String(price) });
+      const newPromo = promo(tnP.variants?.[0]);
+      if (match.promotionalPrice !== newPromo) incoming.push({ field: "promotionalPrice", oldValue: match.promotionalPrice == null ? null : String(match.promotionalPrice), newValue: newPromo == null ? null : String(newPromo) });
       if (incoming.length) {
         const now = new Date();
         await prisma.changelog.createMany({ data: incoming.map((c) => ({ productId: match.id, ...c, synced: true, syncedAt: now })) });

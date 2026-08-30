@@ -146,11 +146,15 @@ export async function applyIncoming(tiendaNubeIds: string[], storeId: string, ac
       lastSyncedAt: new Date(),
     };
 
-    const existing = await prisma.product.findUnique({ where: { tiendaNubeId: tnId }, select: { id: true } });
+    const existing = await prisma.product.findUnique({ where: { tiendaNubeId: tnId }, select: { id: true, price: true } });
     let localId: number;
     if (existing) {
       await prisma.product.update({ where: { id: existing.id }, data });
       localId = existing.id;
+      // Registrar el cambio de precio entrante (esta ruta lo aplicaba sin loguear).
+      if (existing.price !== price) {
+        await prisma.changelog.create({ data: { productId: existing.id, field: "price", oldValue: String(existing.price), newValue: String(price), synced: true, syncedAt: new Date() } });
+      }
     } else {
       const created = await prisma.product.create({
         data: {

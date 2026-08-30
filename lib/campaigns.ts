@@ -248,7 +248,7 @@ export async function applyCampaign(campaignId: number) {
   for (const item of c.items) {
     let promo = item.campaignPrice;
     if (settings && item.promoCostUsd != null) {
-      const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { name: true, categories: { select: { categoryId: true } } } });
+      const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { name: true, costUsdPromo: true, categories: { select: { categoryId: true } } } });
       const computed = prod ? priceForProduct({ name: prod.name, categoryIds: prod.categories.map((cc) => cc.categoryId) }, item.promoCostUsd, settings) : null;
       if (computed != null) {
         promo = computed;
@@ -257,6 +257,9 @@ export async function applyCampaign(campaignId: number) {
         }
       }
       await prisma.product.update({ where: { id: item.productId }, data: { costUsdPromo: item.promoCostUsd } });
+      if ((prod?.costUsdPromo ?? null) !== item.promoCostUsd) {
+        await prisma.changelog.create({ data: { productId: item.productId, field: "costUsdPromo", oldValue: prod?.costUsdPromo == null ? null : String(prod.costUsdPromo), newValue: String(item.promoCostUsd) } });
+      }
     }
     await applyPromo(c, item.productId, promo, parseVariantPrices(item.variantPrices));
   }
@@ -275,7 +278,11 @@ export async function endCampaign(campaignId: number) {
     // Modo "costs": la promo del proveedor terminó — limpiar el costo promocional
     // para que vuelva a regir solo el precio base derivado de costUsd.
     if (c.mode === "costs" && item.promoCostUsd != null) {
+      const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { costUsdPromo: true } });
       await prisma.product.update({ where: { id: item.productId }, data: { costUsdPromo: null } });
+      if (prod?.costUsdPromo != null) {
+        await prisma.changelog.create({ data: { productId: item.productId, field: "costUsdPromo", oldValue: String(prod.costUsdPromo), newValue: null } });
+      }
     }
   }
 
