@@ -65,6 +65,19 @@ function dayLabel(iso: string): string {
   return d.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
 }
 
+/** Agrupa entradas consecutivas del mismo producto hechas en una misma sesión (≤30 min). */
+function clusterDay(items: Log[]): Log[][] {
+  const out: Log[][] = [];
+  for (const l of items) {
+    const last = out[out.length - 1];
+    const prev = last?.[last.length - 1];
+    const sameSession = !!prev && prev.productId === l.productId
+      && Math.abs(new Date(prev.createdAt).getTime() - new Date(l.createdAt).getTime()) <= 30 * 60 * 1000;
+    if (sameSession) last.push(l); else out.push([l]);
+  }
+  return out;
+}
+
 export default function ChangesClient() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [pending, setPending] = useState(0);
@@ -185,7 +198,9 @@ export default function ChangesClient() {
               <div key={g.day}>
                 <div style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--color-subtle)", marginBottom: 10 }}>{g.day}</div>
                 <div className="card-float" style={{ overflow: "hidden", padding: 0 }}>
-                  {g.items.map((l, i) => <Row key={l.id} log={l} first={i === 0} onOpen={() => setHistory({ id: l.productId, name: l.productName })} />)}
+                  {clusterDay(g.items).map((cluster, i) => cluster.length === 1
+                    ? <Row key={cluster[0].id} log={cluster[0]} first={i === 0} onOpen={() => setHistory({ id: cluster[0].productId, name: cluster[0].productName })} />
+                    : <ClusterRow key={cluster[0].id} logs={cluster} first={i === 0} onOpen={() => setHistory({ id: cluster[0].productId, name: cluster[0].productName })} />)}
                 </div>
               </div>
             ))}
@@ -255,6 +270,46 @@ function Row({ log, first, onOpen }: { log: Log; first: boolean; onOpen: () => v
         </div>
       </div>
     </button>
+  );
+}
+
+/** Fila agrupada: varios cambios del mismo producto en una sesión, colapsados y expandibles. */
+function ClusterRow({ logs, first, onOpen }: { logs: Log[]; first: boolean; onOpen: () => void }) {
+  const [open, setOpen] = useState(false);
+  const head = logs[0]; // el más reciente
+  const labels = [...new Set(logs.map((l) => l.field))].map((fk) => FIELD[fk]?.label ?? fk);
+  return (
+    <div style={{ borderTop: first ? "none" : "1px solid var(--color-divider)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px" }}>
+        {/* Contador (reemplaza al ícono de campo único) */}
+        <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--color-surface-2)", color: "var(--color-muted)", fontSize: "0.75rem", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{logs.length}</span>
+
+        {/* Miniatura del producto */}
+        {head.productImage
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={head.productImage} alt="" style={{ width: 30, height: 30, borderRadius: 7, objectFit: "cover", flexShrink: 0, background: "var(--color-surface-2)" }} />
+          : <span style={{ width: 30, height: 30, borderRadius: 7, background: "var(--color-surface-2)", flexShrink: 0 }} />}
+
+        {/* Producto + resumen de campos (abre el historial) */}
+        <button onClick={onOpen} className="product-row-link" style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: 0, font: "inherit", color: "inherit" }}>
+          <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{head.productName}</div>
+          <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
+            <span style={{ fontWeight: 600, color: "var(--color-muted)" }}>{logs.length} cambios</span> · {labels.join(", ")}
+          </div>
+        </button>
+
+        <span style={{ fontSize: "0.6875rem", color: "var(--color-subtle)", whiteSpace: "nowrap", flexShrink: 0 }}>{relTime(head.createdAt)}</span>
+        <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={open ? "Contraer cambios" : "Expandir cambios"}
+          style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", color: "var(--color-subtle)", fontSize: "0.6875rem", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {open ? "▲" : "▼"}
+        </button>
+      </div>
+      {open && (
+        <div style={{ padding: "0 16px 8px 58px" }}>
+          {logs.map((l, i) => <HistoryRow key={l.id} log={l} first={i === 0} />)}
+        </div>
+      )}
+    </div>
   );
 }
 
