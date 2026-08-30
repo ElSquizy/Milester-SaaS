@@ -10,7 +10,7 @@ import { PRESETS, PRESET_LABEL, type Preset, type Granularity, type SeriesPoint,
 
 // Paleta para el desglose por canal — el resto del sistema es mono-brand.
 const BRAND = "var(--color-brand)";
-const SOURCE_COLORS: Record<string, string> = { tiendanube: "#2563EB", local: "#8B5CF6" };
+const SOURCE_COLORS: Record<string, string> = { tiendanube: "var(--color-chart-1)", local: "var(--color-chart-2)" };
 const SOURCE_LABEL: Record<string, string> = { tiendanube: "Tienda web", local: "Carga manual" };
 
 const money = (n: number) => `$${Math.round(n).toLocaleString("es-AR")}`;
@@ -324,7 +324,7 @@ function ProjectionCard({ p }: { p: Projection }) {
   );
 }
 
-const PLAT_COLOR: Record<string, string> = { PS5: "#2563EB", PS4: "#8B5CF6", Otro: "var(--color-faint)" };
+const PLAT_COLOR: Record<string, string> = { PS5: "var(--color-chart-1)", PS4: "var(--color-chart-2)", Otro: "var(--color-faint)" };
 
 function BreakdownsSection({ breakdowns }: { breakdowns: Breakdowns }) {
   const { retention, platforms, types, categories } = breakdowns;
@@ -358,7 +358,7 @@ function BreakdownsSection({ breakdowns }: { breakdowns: Breakdowns }) {
         <BreakdownBars title="Por plataforma" hint="Facturación por consola (PS5 / PS4)." rows={platforms} colorOf={(k) => PLAT_COLOR[k] ?? "var(--color-brand)"} />
 
         {/* Tipo de cuenta */}
-        <BreakdownBars title="Por tipo" hint="Primaria vs. secundaria (según el nombre del producto)." rows={types} colorOf={(k) => (k === "Secundaria" ? "#8B5CF6" : k === "Primaria" ? "#2563EB" : "var(--color-faint)")} />
+        <BreakdownBars title="Por tipo" hint="Primaria vs. secundaria (según el nombre del producto)." rows={types} colorOf={(k) => (k === "Secundaria" ? "var(--color-chart-2)" : k === "Primaria" ? "var(--color-chart-1)" : "var(--color-faint)")} />
 
         {/* Colección */}
         <BreakdownBars title="Por colección" hint="Top colecciones por facturación (colección principal del producto)." rows={categories} colorOf={() => "var(--color-brand)"} />

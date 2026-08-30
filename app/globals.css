@@ -10,6 +10,11 @@
   --color-brand-light: #EFF6FF;   /* blue-50 tint for selection */
   --color-brand-ring:  rgba(59, 130, 246, 0.35); /* focus ring */
 
+  /* Data-viz — series primaria/secundaria para gráficos de 2 categorías
+     (canal, plataforma PS5/PS4, tipo primaria/secundaria). */
+  --color-chart-1: var(--color-brand);   /* azul */
+  --color-chart-2: #8B5CF6;              /* violeta */
+
   /* Surfaces — warm very-light gray, never pure white */
   --color-bg:          #F9FAFB;
   --color-surface:     #FFFFFF;
