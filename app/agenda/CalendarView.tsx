@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, addMonths, format, isSameMonth, isToday } from "date-fns";
 import { es } from "date-fns/locale";
+import Modal from "./Modal";
 
 // Cada evento del calendario trae su `day` (YYYY-MM-DD) y un `type`.
 type CalEvent = {
@@ -158,12 +159,7 @@ function EventModal({ init, onClose, onSaved }: {
   }
 
   return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 460, background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", padding: "22px 24px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.02em" }}>{editing ? "Editar evento" : "Nuevo evento"}</div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
-        </div>
+    <Modal title={editing ? "Editar evento" : "Nuevo evento"} onClose={onClose} maxWidth={460}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <label style={fieldWrap}><span style={fieldLbl}>Título</span>
             <input className="input" autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej. Lanzamiento GTA VI" /></label>
@@ -183,8 +179,7 @@ function EventModal({ init, onClose, onSaved }: {
             <button className="btn-secondary" onClick={onClose} disabled={busy} style={{ marginLeft: "auto" }}>Cancelar</button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

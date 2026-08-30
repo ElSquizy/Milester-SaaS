@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, format, isToday } from "date-fns";
 import { es } from "date-fns/locale";
+import Modal from "./Modal";
 
 type Emp = { id: number; name: string; color: string };
 type Shift = { id: number; employeeId: number; start: string; end: string; note: string | null; day: string; employee: { id: number; name: string; color: string } };
@@ -277,12 +278,7 @@ function ShiftModal({ init, employees, onClose, onSaved }: {
   }
 
   return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 440, background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", padding: "22px 24px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.02em" }}>{editing ? "Editar turno" : "Nuevo turno"}</div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
-        </div>
+    <Modal title={editing ? "Editar turno" : "Nuevo turno"} onClose={onClose} maxWidth={440}>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <label style={fw}><span style={fl}>Empleado</span>
             <select className="input" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
@@ -303,8 +299,7 @@ function ShiftModal({ init, employees, onClose, onSaved }: {
             <button className="btn-secondary" onClick={onClose} disabled={busy} style={{ marginLeft: "auto" }}>Cancelar</button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

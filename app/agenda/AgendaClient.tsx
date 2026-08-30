@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import CalendarView from "./CalendarView";
 import HorariosView from "./HorariosView";
+import Modal from "./Modal";
 
 type Employee = { id: number; name: string; role: string | null; color: string; active: boolean; openTasks: number };
 type Assignee = { id: number; name: string; color: string } | null;
@@ -376,20 +377,6 @@ function TeamModal({ employees, onClose, onChanged }: { employees: Employee[]; o
         </div>
       </div>
     </Modal>
-  );
-}
-
-function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
-  return (
-    <div onClick={onClose} className="anim-in" style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(17,24,39,0.45)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div onClick={(e) => e.stopPropagation()} className="anim-modal" style={{ width: "100%", maxWidth: 560, maxHeight: "calc(100dvh - 48px)", overflowY: "auto", background: "var(--color-surface)", borderRadius: "var(--radius-modal)", boxShadow: "var(--shadow-float)", padding: "22px 24px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.02em" }}>{title}</div>
-          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "var(--color-surface-2)", cursor: "pointer", color: "var(--color-muted)" }}>✕</button>
-        </div>
-        {children}
-      </div>
-    </div>
   );
 }
 
