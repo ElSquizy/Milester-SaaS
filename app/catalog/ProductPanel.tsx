@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import CollectionPicker from "./CollectionPicker";
+import PriceHistoryChart from "./PriceHistoryChart";
 import { isInFocus, toggleFocus } from "./useFocus";
 import { useIsMobile } from "@/components/useIsMobile";
 import { notifyPendingChanged } from "@/lib/pendingEvent";
@@ -338,6 +339,12 @@ export default function ProductPanel({ product, onClose, onSaved, onAdvanced }: 
                     style={{ ...inputStyle, paddingLeft: 40, fontVariantNumeric: "tabular-nums" }} />
                 </div>
               </Field>
+            </div>
+
+            {/* Historial de precios */}
+            <div style={{ borderTop: "1px solid var(--color-divider)", paddingTop: 16, marginTop: 4 }}>
+              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-muted)", marginBottom: 10 }}>Historial de precios</div>
+              <PriceHistoryChart productId={product.id} current={{ price: product.price, promotionalPrice: product.promotionalPrice, costUsd: product.costUsd, costUsdPromo: product.costUsdPromo }} />
             </div>
 
             {/* Tags */}

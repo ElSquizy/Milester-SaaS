@@ -25,6 +25,8 @@ const FIELD: Record<string, { label: string; icon: React.ReactNode; color: strin
   categories: { label: "Colecciones", color: "var(--color-warning)", bg: "var(--color-warning-bg)", icon: <><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></> },
   sku: { label: "SKU", color: "var(--color-muted)", bg: "var(--color-surface-2)", icon: <><rect x="3" y="5" width="18" height="14" rx="1" /><path d="M7 8v8M11 8v8M15 8v8M18 8v8" /></> },
   stock: { label: "Stock", color: "var(--color-brand)", bg: "var(--color-brand-light)", icon: <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></> },
+  costUsd: { label: "Costo USD", color: "var(--color-ink)", bg: "var(--color-surface-2)", icon: <><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></> },
+  costUsdPromo: { label: "Costo USD Promo", color: "var(--color-success)", bg: "var(--color-success-bg)", icon: <><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></> },
 };
 
 function money(v: string | null): string {
@@ -34,14 +36,16 @@ function money(v: string | null): string {
 }
 function fmt(field: string, v: string | null): string {
   if (field === "price" || field === "promotionalPrice") return money(v);
+  if (field === "costUsd" || field === "costUsdPromo") return v == null || v === "" ? "—" : `US$${Number(v).toLocaleString("es-AR")}`;
   if (field === "published") return v === "true" ? "Publicado" : v === "false" ? "Oculto" : (v || "—");
   if (field === "stock") return v == null || v === "" ? "—" : Number(v).toLocaleString("es-AR");
   return v == null || v === "" ? "—" : v;
 }
 
 /** Variación % en cambios de precio (neutral: la flecha marca dirección, no juicio). */
+const PRICE_FIELDS = ["price", "promotionalPrice", "costUsd", "costUsdPromo"];
 function priceDelta(field: string, oldV: string | null, newV: string | null): { pct: number; up: boolean } | null {
-  if (field !== "price" && field !== "promotionalPrice") return null;
+  if (!PRICE_FIELDS.includes(field)) return null;
   const o = Number(oldV), n = Number(newV);
   if (!isFinite(o) || !isFinite(n) || o <= 0 || o === n) return null;
   const pct = Math.round(((n - o) / o) * 100);

@@ -149,6 +149,11 @@ export async function updateProduct(idNum: number, body: UpdateProductInput) {
   if (skuChanged) changes.push({ field: "sku", oldValue: existing.sku, newValue: normSku });
   if (priceChanged && price !== undefined) changes.push({ field: "price", oldValue: String(existing.price), newValue: String(price) });
   if (promoChanged) changes.push({ field: "promotionalPrice", oldValue: existing.promotionalPrice == null ? null : String(existing.promotionalPrice), newValue: normPromo == null ? null : String(normPromo) });
+  // Costos USD (local-only): loguearlos habilita el gráfico histórico de precios.
+  const normCost = costUsd === undefined ? undefined : (costUsd === null || String(costUsd) === "" || isNaN(Number(costUsd)) ? null : Number(costUsd));
+  if (normCost !== undefined && existing.costUsd !== normCost) changes.push({ field: "costUsd", oldValue: existing.costUsd == null ? null : String(existing.costUsd), newValue: normCost == null ? null : String(normCost) });
+  const normCostPromo = costUsdPromo === undefined ? undefined : (costUsdPromo === null || String(costUsdPromo) === "" || isNaN(Number(costUsdPromo)) ? null : Number(costUsdPromo));
+  if (normCostPromo !== undefined && existing.costUsdPromo !== normCostPromo) changes.push({ field: "costUsdPromo", oldValue: existing.costUsdPromo == null ? null : String(existing.costUsdPromo), newValue: normCostPromo == null ? null : String(normCostPromo) });
   // Description changes: don't dump the (large) HTML into changelog values.
   if (resolvedDescription !== undefined && existing.description !== resolvedDescription) changes.push({ field: "description", oldValue: null, newValue: null });
   if (published !== undefined && existing.published !== published) changes.push({ field: "published", oldValue: String(existing.published), newValue: String(published) });
