@@ -145,6 +145,7 @@ export default function HorariosView({ employees }: { employees: Emp[] }) {
         </span>
         <button onClick={() => setWeekStart((w) => addWeeks(w, 1))} style={navBtn}>›</button>
         <button onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))} className="btn-secondary" style={{ padding: "6px 12px", fontSize: "0.8125rem" }}>Esta semana</button>
+        <button className="btn-primary" onClick={() => setModal({ employeeId: activeEmp ?? undefined, date: today >= from && today <= to ? today : from, start: "09:00", end: "18:00" })} style={{ padding: "6px 12px", fontSize: "0.8125rem" }}>+ Turno</button>
         {loading && <span style={{ fontSize: "0.75rem", color: "var(--color-subtle)" }}>cargando…</span>}
         <label style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7, fontSize: "0.8125rem", color: "var(--color-muted)", cursor: "pointer" }}>
           <input type="checkbox" checked={showHeat} onChange={(e) => setShowHeat(e.target.checked)} />
