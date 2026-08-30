@@ -40,7 +40,9 @@ function delta(cur: number, prev: number): number | null {
   return Math.round(((cur - prev) / prev) * 1000) / 10;
 }
 
-const H2: React.CSSProperties = { fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--color-subtle)", margin: "0 0 12px" };
+// Título de sección: sentence-case, tamaño real e ink — no un eyebrow mayúsculas.
+// A 17px/600 se ubica por encima de los títulos de tarjeta (15px) que contiene.
+const H2: React.CSSProperties = { fontSize: "1.0625rem", fontWeight: 600, letterSpacing: "-0.01em", color: "var(--color-ink)", margin: "0 0 14px" };
 
 export default function MetricsClient({
   preset, fromDay, toDay, granularity, current, previous, series, topProducts, bySource, projection, insights, breakdowns, heatmap, funnel, campaignEffects,
