@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { fieldBreakpoints, unifiedRows, type Change } from "@/lib/priceSeries";
 
-type Change = { field: string; oldValue: string | null; newValue: string | null; createdAt: string };
 type Current = { price: number; promotionalPrice: number | null; costUsd: number | null; costUsdPromo: number | null };
 
 const SERIES = [
@@ -12,7 +12,6 @@ const SERIES = [
   { key: "costUsdPromo", label: "Costo promo USD", color: "var(--color-chart-3)", unit: "usd" as const },
 ];
 const KEYS = SERIES.map((s) => s.key);
-const parseNum = (v: string | null): number | null => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
 const arsShort = (n: number) => (Math.abs(n) >= 1000 ? `$${Math.round(n / 1000)}k` : `$${Math.round(n)}`);
 const arsFull = (n: number) => `$${Math.round(n).toLocaleString("es-AR")}`;
 const usdFull = (n: number) => `US$${n.toLocaleString("es-AR")}`;
@@ -38,42 +37,11 @@ export default function PriceHistoryChart({ productId, current }: { productId: n
     return () => { alive = false; };
   }, [productId]);
 
-  // Reconstruye la trayectoria de cada precio (función escalonada) sobre una
-  // línea de tiempo unificada. Los campos sin historial muestran solo el punto de hoy.
+  // Reconstruye la trayectoria de cada precio (escalonada) sobre un eje temporal
+  // unificado; los campos sin historial muestran solo el punto de hoy.
   const { rows, hasAny } = useMemo(() => {
-    const now = Date.now();
-    const times = changes.map((c) => new Date(c.createdAt).getTime());
-    const tMin = times.length ? Math.min(...times) : now;
-
-    const bpByKey: Record<string, { t: number; v: number }[]> = {};
-    for (const s of SERIES) {
-      const cs = changes.filter((c) => c.field === s.key).sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-      const cur = current[s.key as keyof Current];
-      const bps: { t: number; v: number }[] = [];
-      if (cs.length) {
-        const old0 = parseNum(cs[0].oldValue);
-        if (old0 != null) bps.push({ t: tMin, v: old0 });         // valor previo al primer cambio
-        for (const c of cs) { const nv = parseNum(c.newValue); if (nv != null) bps.push({ t: new Date(c.createdAt).getTime(), v: nv }); }
-        if (cur != null) bps.push({ t: now, v: cur });            // extiende hasta hoy
-      } else if (cur != null) {
-        bps.push({ t: now, v: cur });                            // sin historial: solo hoy
-      }
-      bpByKey[s.key] = bps;
-    }
-
-    const allT = Array.from(new Set([...changes.map((c) => new Date(c.createdAt).getTime()), now, tMin])).sort((a, b) => a - b);
-    const valueAt = (bps: { t: number; v: number }[], t: number): number | null => {
-      let v: number | null = null;
-      for (const b of bps) { if (b.t <= t) v = b.v; else break; }
-      return v;
-    };
-    const rows = allT.map((t) => {
-      const row: Record<string, number | null> = { t };
-      for (const s of SERIES) row[s.key] = valueAt(bpByKey[s.key], t);
-      return row;
-    });
-    const hasAny = SERIES.some((s) => bpByKey[s.key].length > 0);
-    return { rows, hasAny };
+    const sets = SERIES.map((s) => ({ key: s.key, bps: fieldBreakpoints(changes.filter((c) => c.field === s.key), current[s.key as keyof Current]) }));
+    return { rows: unifiedRows(sets), hasAny: sets.some((s) => s.bps.length > 0) };
   }, [changes, current]);
 
   const activeSeries = SERIES.filter((s) => active[s.key]);
@@ -123,7 +91,7 @@ export default function PriceHistoryChart({ productId, current }: { productId: n
             <Tooltip content={<PriceTooltip />} />
             {activeSeries.map((s) => (
               <Line key={s.key} yAxisId={s.unit} type="stepAfter" dataKey={s.key} name={s.label}
-                stroke={s.color} strokeWidth={2} dot={{ r: 2, fill: s.color }} activeDot={{ r: 4 }} connectNulls isAnimationActive={false} />
+                stroke={s.color} strokeWidth={2} dot={{ r: 2, fill: s.color }} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
             ))}
           </LineChart>
         </ResponsiveContainer>

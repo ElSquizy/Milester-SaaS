@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { fieldBreakpoints, unifiedRows, type Change } from "@/lib/priceSeries";
 
-type Change = { field: string; oldValue: string | null; newValue: string | null; createdAt: string };
 type Prod = { id: number; name: string };
 
 const FIELDS = [
@@ -15,7 +15,6 @@ const FIELD_KEYS = FIELDS.map((f) => f.key);
 const COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-success)", "var(--color-danger)", "var(--color-info)"];
 const MAX = 6;
 
-const parseNum = (v: string | null): number | null => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
 const fmtDate = (t: number) => new Date(t).toLocaleDateString("es-AR", { day: "numeric", month: "short" });
 const arsShort = (n: number) => (Math.abs(n) >= 1000 ? `$${Math.round(n / 1000)}k` : `$${Math.round(n)}`);
 const fmtVal = (n: number, unit: "ars" | "usd") => (unit === "usd" ? `US$${n.toLocaleString("es-AR")}` : `$${Math.round(n).toLocaleString("es-AR")}`);
@@ -27,8 +26,19 @@ export default function ProductPriceComparator() {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Prod[]>([]);
   const [openList, setOpenList] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
   const field = FIELDS.find((f) => f.key === fieldKey)!;
+
+  // Cerrar el dropdown al hacer clic afuera o con Escape.
+  useEffect(() => {
+    if (!openList) return;
+    const onDown = (e: MouseEvent) => { if (searchRef.current && !searchRef.current.contains(e.target as Node)) setOpenList(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpenList(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [openList]);
 
   // Búsqueda de productos (debounce).
   useEffect(() => {
@@ -58,42 +68,13 @@ export default function ProductPriceComparator() {
   }
   const remove = (id: number) => setSelected((s) => s.filter((p) => p.id !== id));
 
-  // Reconstruye la serie del campo elegido para cada producto (escalonada).
+  // Reconstruye la serie del campo elegido para cada producto (escalonada), cada
+  // uno con su propia historia — sin backdating entre productos.
   const { rows, series } = useMemo(() => {
-    const now = Date.now();
-    const bpByProduct: Record<number, { t: number; v: number }[]> = {};
-    const allTimes: number[] = [now];
-    // tMin global entre los productos con historia del campo.
-    let tMin = now;
-    const csByP: Record<number, Change[]> = {};
-    for (const p of selected) {
-      const cs = (hist[p.id] || []).filter((c) => c.field === fieldKey).sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-      csByP[p.id] = cs;
-      if (cs.length) tMin = Math.min(tMin, new Date(cs[0].createdAt).getTime());
-    }
-    for (const p of selected) {
-      const cs = csByP[p.id]; const bps: { t: number; v: number }[] = [];
-      if (cs.length) {
-        const old0 = parseNum(cs[0].oldValue);
-        if (old0 != null) bps.push({ t: tMin, v: old0 });
-        let last: number | null = old0;
-        for (const c of cs) { const nv = parseNum(c.newValue); if (nv != null) { bps.push({ t: new Date(c.createdAt).getTime(), v: nv }); last = nv; } allTimes.push(new Date(c.createdAt).getTime()); }
-        if (last != null) bps.push({ t: now, v: last });
-      }
-      bpByProduct[p.id] = bps;
-    }
-    const times = Array.from(new Set(allTimes)).sort((a, b) => a - b);
-    const valueAt = (bps: { t: number; v: number }[], t: number): number | null => {
-      let v: number | null = null;
-      for (const b of bps) { if (b.t <= t) v = b.v; else break; }
-      return v;
-    };
-    const rows = times.map((t) => {
-      const row: Record<string, number | null> = { t };
-      for (const p of selected) row[`p${p.id}`] = valueAt(bpByProduct[p.id], t);
-      return row;
-    });
-    const series = selected.map((p, i) => ({ ...p, color: COLORS[i % COLORS.length], hasData: bpByProduct[p.id].length > 0 }));
+    const sets = selected.map((p) => ({ key: `p${p.id}`, bps: fieldBreakpoints((hist[p.id] || []).filter((c) => c.field === fieldKey)) }));
+    const bpCount = new Map(sets.map((s) => [s.key, s.bps.length]));
+    const rows = unifiedRows(sets);
+    const series = selected.map((p, i) => ({ ...p, color: COLORS[i % COLORS.length], hasData: (bpCount.get(`p${p.id}`) ?? 0) > 0 }));
     return { rows, series };
   }, [selected, hist, fieldKey]);
 
@@ -128,7 +109,7 @@ export default function ProductPriceComparator() {
             </span>
           ))}
           {selected.length < MAX && (
-            <div style={{ position: "relative" }}>
+            <div ref={searchRef} style={{ position: "relative" }}>
               <input value={q} onChange={(e) => { setQ(e.target.value); setOpenList(true); }} onFocus={() => setOpenList(true)}
                 placeholder="+ Agregar producto…" aria-label="Buscar producto para comparar"
                 className="input" style={{ width: 200, padding: "6px 11px", fontSize: "0.8125rem" }} />
@@ -163,7 +144,7 @@ export default function ProductPriceComparator() {
                   tickFormatter={(v) => (field.unit === "usd" ? `US$${v}` : arsShort(v))} />
                 <Tooltip content={<CmpTooltip series={series} unit={field.unit} />} />
                 {series.filter((s) => s.hasData).map((p) => (
-                  <Line key={p.id} type="stepAfter" dataKey={`p${p.id}`} name={p.name} stroke={p.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls isAnimationActive={false} />
+                  <Line key={p.id} type="stepAfter" dataKey={`p${p.id}`} name={p.name} stroke={p.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls={false} isAnimationActive={false} />
                 ))}
               </LineChart>
             </ResponsiveContainer>
