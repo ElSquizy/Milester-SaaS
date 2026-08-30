@@ -372,11 +372,12 @@ export default async function HomePage() {
                       <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: c.dot }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</div>
-                        <div style={{ fontSize: "0.75rem", color: "var(--color-subtle)", marginTop: 1 }}>
-                          {c.note}{c.countdownTo && <> <Countdown to={c.countdownTo} prefix={c.cdPrefix} /></>}
+                        <div style={{ fontSize: "0.75rem", marginTop: 2 }}>
+                          <span style={{ fontWeight: 600, color: c.dot }}>{c.note}</span>
+                          {c.countdownTo && <span style={{ color: "var(--color-subtle)" }}> <Countdown to={c.countdownTo} prefix={c.cdPrefix} /></span>}
                         </div>
                       </div>
-                      {c.extra && <span style={{ fontSize: "0.75rem", color: "var(--color-faint)", flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{c.extra}</span>}
+                      {c.extra && <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-muted)", flexShrink: 0, fontVariantNumeric: "tabular-nums", padding: "3px 8px", borderRadius: "var(--radius-pill)", background: "var(--color-surface-2)" }}>{c.extra}</span>}
                     </div>
                   </Link>
                 ))
