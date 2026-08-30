@@ -170,7 +170,7 @@ export default async function HomePage() {
     t === "danger" ? "var(--color-danger-bg)" : "var(--color-warning-bg)";
 
   return (
-    <div style={{ padding: "48px 48px 80px", overflowY: "auto", height: "100dvh" }}>
+    <div className="page-scroll">
       <div style={{ maxWidth: 880, margin: "0 auto" }}>
 
         {/* Header */}

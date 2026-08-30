@@ -87,7 +87,7 @@ export default function MetricsClient({
   const empty = current.orders === 0;
 
   return (
-    <div style={{ padding: "48px 48px 80px", overflowY: "auto", height: "100dvh", opacity: pending ? 0.6 : 1, transition: "opacity 0.15s" }}>
+    <div className="page-scroll" style={{ opacity: pending ? 0.6 : 1, transition: "opacity 0.15s" }}>
       <div style={{ maxWidth: 980, margin: "0 auto" }}>
 
         {/* Header */}

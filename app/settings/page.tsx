@@ -199,7 +199,7 @@ export default function SettingsPage() {
   const ordersPct = ordersProgress ? Math.round((ordersProgress.value / ordersProgress.total) * 100) : 0;
 
   return (
-    <div style={{ height: "100dvh", overflowY: "auto", padding: "48px 48px 80px" }}>
+    <div className="page-scroll">
     <div style={{ display: "flex", flexDirection: "column", gap: 48, maxWidth: 560 }}>
 
       <div>

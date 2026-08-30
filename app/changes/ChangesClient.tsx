@@ -101,7 +101,7 @@ export default function ChangesClient() {
   }
 
   return (
-    <div style={{ height: "100dvh", overflowY: "auto", padding: "48px 48px 80px" }}>
+    <div className="page-scroll">
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
 
         {/* Header */}
