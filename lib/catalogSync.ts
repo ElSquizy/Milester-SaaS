@@ -191,7 +191,7 @@ export async function pruneDeletedProducts(storeId: string, accessToken: string)
 export async function syncCatalogFromTiendaNube(
   storeId: string,
   accessToken: string,
-  opts: { full?: boolean } = {},
+  opts: { full?: boolean; prune?: boolean } = {},
 ): Promise<{ collections: number; deleted: number } & UpsertResult> {
   const settings = await prisma.settings.findFirst();
   const scanStart = new Date();
@@ -222,8 +222,13 @@ export async function syncCatalogFromTiendaNube(
 
   const res = await upsertTnProducts(tnProducts, categoryMap);
 
-  // Reconcile deletions (products removed on TN). The id-only listing is cheap.
-  const { deleted } = await pruneDeletedProducts(storeId, accessToken);
+  // Reconciliar borrados (productos eliminados en TN) recorre TODO el catálogo de
+  // TN (~O(catálogo), lento). Desacoplado del pull interactivo: corre solo cuando
+  // se pide explícitamente (prune) o en un pase full — normalmente desde el cron
+  // diario (/api/cron?prune=1), no en cada navegación.
+  const { deleted } = (opts.prune || opts.full)
+    ? await pruneDeletedProducts(storeId, accessToken)
+    : { deleted: 0 };
 
   if (settings) {
     await prisma.settings.update({ where: { id: settings.id }, data: { lastCatalogSyncAt: scanStart } });

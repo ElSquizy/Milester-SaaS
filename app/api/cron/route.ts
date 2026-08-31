@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { tickCampaigns } from "@/lib/campaignScheduler";
 import { pullFromTiendaNube } from "@/lib/pullSync";
+import { logError } from "@/lib/logger";
 
 export const runtime = "nodejs";
 
@@ -30,10 +31,13 @@ export async function GET(req: Request) {
   // local dev server rather than the deployed function, whose time limit it can
   // exceed. See docs/arquitectura.md → Reconstrucción.
   const full = new URL(req.url).searchParams.get("full") === "1";
+  // Reconciliar borrados es caro (recorre todo el catálogo TN). Desacoplado del
+  // pull normal: correr un cron diario aparte con ?prune=1. `full` también prunea.
+  const prune = full || new URL(req.url).searchParams.get("prune") === "1";
 
-  const out: Record<string, unknown> = { ranAt: new Date().toISOString(), ...(full ? { full: true } : {}) };
-  try { out.campaigns = await tickCampaigns(creds); } catch (e) { out.campaignsError = e instanceof Error ? e.message : "error"; }
-  try { out.pull = await pullFromTiendaNube(creds.storeId, creds.accessToken, { full }); } catch (e) { out.pullError = e instanceof Error ? e.message : "error"; }
+  const out: Record<string, unknown> = { ranAt: new Date().toISOString(), ...(full ? { full: true } : {}), ...(prune ? { prune: true } : {}) };
+  try { out.campaigns = await tickCampaigns(creds); } catch (e) { logError("cron.campaigns", e); out.campaignsError = e instanceof Error ? e.message : "error"; }
+  try { out.pull = await pullFromTiendaNube(creds.storeId, creds.accessToken, { full, prune }); } catch (e) { logError("cron.pull", e); out.pullError = e instanceof Error ? e.message : "error"; }
 
   await prisma.settings.update({ where: { id: settings.id }, data: { lastCampaignTickAt: new Date(), lastPullAt: new Date() } }).catch(() => {});
   return NextResponse.json(out);

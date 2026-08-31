@@ -3,6 +3,7 @@ import { syncCatalogFromTiendaNube } from "./catalogSync";
 import { syncOrdersIncremental } from "./salesSync";
 import { tickCampaigns } from "./campaignScheduler";
 import { recordTnError, clearTnError } from "./tnHealth";
+import { logError } from "./logger";
 
 export type PullSummary = {
   collections: number;
@@ -22,7 +23,7 @@ export type PullSummary = {
 export async function pullFromTiendaNube(
   storeId: string,
   accessToken: string,
-  opts: { full?: boolean } = {},
+  opts: { full?: boolean; prune?: boolean } = {},
 ): Promise<PullSummary> {
   const summary: PullSummary = {
     collections: 0,
@@ -40,6 +41,7 @@ export async function pullFromTiendaNube(
     summary.catalog = { created: c.created, updated: c.updated, skipped: c.skipped, deleted: c.deleted };
   } catch (err) {
     if (await recordTnError(err)) apiDown = true;
+    logError("pull.catalog", err, { storeId });
     summary.errors.push(`Catálogo: ${err instanceof Error ? err.message : "error"}`);
   }
 
@@ -47,6 +49,7 @@ export async function pullFromTiendaNube(
     summary.sales = await syncOrdersIncremental(storeId, accessToken, opts);
   } catch (err) {
     if (await recordTnError(err)) apiDown = true;
+    logError("pull.sales", err, { storeId });
     summary.errors.push(`Ventas: ${err instanceof Error ? err.message : "error"}`);
   }
 
@@ -56,6 +59,7 @@ export async function pullFromTiendaNube(
   try {
     summary.campaigns = await tickCampaigns({ storeId, accessToken });
   } catch (err) {
+    logError("pull.campaigns", err, { storeId });
     summary.errors.push(`Campañas: ${err instanceof Error ? err.message : "error"}`);
   }
 

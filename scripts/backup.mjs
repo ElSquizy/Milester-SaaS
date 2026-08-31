@@ -16,11 +16,15 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const env = Object.fromEntries(
-  readFileSync(join(root, ".env"), "utf8").split("\n")
-    .map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
-    .map((l) => { const i = l.indexOf("="); return [l.slice(0, i), l.slice(i + 1).replace(/^["']|["']$/g, "")]; }),
-);
+// .env es opcional: en CI (GitHub Actions) las credenciales llegan por process.env.
+let env = {};
+try {
+  env = Object.fromEntries(
+    readFileSync(join(root, ".env"), "utf8").split("\n")
+      .map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
+      .map((l) => { const i = l.indexOf("="); return [l.slice(0, i), l.slice(i + 1).replace(/^["']|["']$/g, "")]; }),
+  );
+} catch { /* sin .env → usar process.env */ }
 const url = process.env.TURSO_DATABASE_URL || env.TURSO_DATABASE_URL;
 const authToken = process.env.TURSO_AUTH_TOKEN || env.TURSO_AUTH_TOKEN;
 if (!url) { console.error("Falta TURSO_DATABASE_URL (.env o entorno)"); process.exit(1); }

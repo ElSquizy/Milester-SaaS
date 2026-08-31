@@ -1,18 +1,22 @@
-name: Backup semanal de datos propios
+name: Backup diario
 
-# Exporta los datos IRRECONSTRUIBLES (campañas, plantillas, tickets, costos,
-# changelog, settings) y los guarda como artifact de GitHub (90 días de
-# retención). El espejo comercial no se exporta: se reconstruye desde Tienda
-# Nube (docs/arquitectura.md → Reconstrucción).
+# Corre scripts/backup.mjs (datos propios de la app: Settings, plantillas,
+# campañas, agenda, mapas id→tiendaNubeId) y guarda el backup CIFRADO como
+# artefacto de GitHub (90 días de retención). El espejo comercial de TN no se
+# respalda: se reconstruye con el pull.
 #
-# Requiere dos secrets de repo (los mismos valores que usa Vercel):
-#   TURSO_DATABASE_URL · TURSO_AUTH_TOKEN
+# Requiere 3 secrets del repo (Settings → Secrets and variables → Actions):
+#   TURSO_DATABASE_URL, TURSO_AUTH_TOKEN  → acceso de solo lectura a la base
+#   BACKUP_PASSPHRASE                     → frase para cifrar/descifrar el backup
 #
-# El artifact contiene las credenciales de Settings: mantené el repo privado.
+# Descifrar un backup descargado:
+#   openssl enc -d -aes-256-cbc -pbkdf2 -in backup-<fecha>.json.enc \
+#     -out backup.json -pass pass:'<tu BACKUP_PASSPHRASE>'
+
 on:
   schedule:
-    - cron: "0 6 * * 1" # lunes 06:00 UTC
-  workflow_dispatch: {}
+    - cron: "0 6 * * *"   # 06:00 UTC = 03:00 AR, todos los días
+  workflow_dispatch: {}    # permite lanzarlo a mano desde la pestaña Actions
 
 jobs:
   backup:
@@ -20,32 +24,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check secrets are configured
-        env:
-          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-        run: |
-          [ -n "$TURSO_DATABASE_URL" ] || { echo "::error::Falta el secret TURSO_DATABASE_URL"; exit 1; }
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "22"
+          cache: npm
 
-      # Solo hace falta @libsql/client; --no-save evita tocar el lockfile.
-      # (NODE_PATH no sirve: los imports ESM no lo consultan.)
-      - name: Install libsql client
-        run: npm install --no-save --ignore-scripts @libsql/client
+      - run: npm ci
 
-      - name: Run backup
+      - name: Generar backup
         env:
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: |
-          touch .env  # el script la lee; los valores reales van por entorno
-          node scripts/backup.mjs
+        run: node scripts/backup.mjs
 
-      - uses: actions/upload-artifact@v4
+      - name: Cifrar y borrar el plano (contiene credenciales)
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          shopt -s nullglob
+          for f in backups/*.json; do
+            openssl enc -aes-256-cbc -pbkdf2 -salt -in "$f" -out "$f.enc" -pass env:BACKUP_PASSPHRASE
+            rm "$f"
+          done
+
+      - name: Subir backup cifrado
+        uses: actions/upload-artifact@v4
         with:
           name: milester-backup-${{ github.run_id }}
-          path: backups/*.json
+          path: backups/*.enc
           retention-days: 90
           if-no-files-found: error
