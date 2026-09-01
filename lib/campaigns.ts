@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { getPricingSettings, priceForProduct } from "./pricing";
+import { logError } from "./logger";
 
 export type Scope = "all" | "category" | "tag";
 export type DiscountType = "pct" | "fixed";
@@ -245,7 +246,9 @@ export async function applyCampaign(campaignId: number) {
   // Modo "costs": recalcular el precio con la config VIGENTE (el dólar pudo
   // moverse desde que se armó el borrador) y dejar costUsdPromo en el producto.
   const settings = c.mode === "costs" ? await getPricingSettings() : null;
+  const failures: number[] = [];
   for (const item of c.items) {
+   try {
     let promo = item.campaignPrice;
     if (settings && item.promoCostUsd != null) {
       const prod = await prisma.product.findUnique({ where: { id: item.productId }, select: { name: true, costUsdPromo: true, categories: { select: { categoryId: true } } } });
@@ -262,8 +265,15 @@ export async function applyCampaign(campaignId: number) {
       }
     }
     await applyPromo(c, item.productId, promo, parseVariantPrices(item.variantPrices));
+   } catch (e) {
+    logError("campaign.apply", e, { campaignId, productId: item.productId });
+    failures.push(item.productId);
+   }
   }
 
+  // Aplicación parcial: NO se marca activa. applyPromo es idempotente (setea la
+  // misma promo), así que reintentar aplica solo lo que faltó y converge.
+  if (failures.length) throw new Error(`Aplicados ${c.items.length - failures.length}/${c.items.length} productos; ${failures.length} fallaron — reintentá para completar.`);
   await prisma.campaign.update({ where: { id: campaignId }, data: { status: "active", appliedAt: now } });
   return { affected: c.items.length };
 }
@@ -273,7 +283,9 @@ export async function endCampaign(campaignId: number) {
   const c = await prisma.campaign.findUnique({ where: { id: campaignId }, include: { items: true } });
   if (!c) throw new Error("Campaña no encontrada");
 
+  const failures: number[] = [];
   for (const item of c.items) {
+   try {
     await clearPromo(c, item.productId, campaignId, parseVariantPrices(item.variantPrices).length > 0);
     // Modo "costs": la promo del proveedor terminó — limpiar el costo promocional
     // para que vuelva a regir solo el precio base derivado de costUsd.
@@ -284,8 +296,14 @@ export async function endCampaign(campaignId: number) {
         await prisma.changelog.create({ data: { productId: item.productId, field: "costUsdPromo", oldValue: String(prod.costUsdPromo), newValue: null } });
       }
     }
+   } catch (e) {
+    logError("campaign.end", e, { campaignId, productId: item.productId });
+    failures.push(item.productId);
+   }
   }
 
+  // Reversión parcial: NO se marca terminada (clearPromo es idempotente → reintentar converge).
+  if (failures.length) throw new Error(`Revertidos ${c.items.length - failures.length}/${c.items.length} productos; ${failures.length} fallaron — reintentá para completar.`);
   // Keep CampaignItems after ending: they're the historical snapshot analytics need.
   await prisma.campaign.update({ where: { id: campaignId }, data: { status: "ended", endedAt: new Date() } });
 
